@@ -19,7 +19,7 @@ class ImGuiHandle
 		std::vector<ID3D12CommandAllocator*>		_cmdAllocators;
 		D3D12_RESOURCE_BARRIER						_barrier = {};
 
-		std::vector<ID3D12Resource*>				_backbuffers;
+		const std::vector<ID3D12Resource*>*			_backbuffers;
 		std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>	_backbufferCPUHandles;
 
 		/* imgui object */
@@ -32,7 +32,7 @@ class ImGuiHandle
 		bool Init(GLFWwindow* window, const D3D12Handle& dx12Handle);
 		bool NewFrame(UINT& currFrameIndex_);
 		bool Render(UINT& currFrameIndex_);
-
+		void Terminate();
 
 
 	private:

@@ -32,8 +32,6 @@ D3D12Handle::~D3D12Handle()
 		_cmdLists[i]->Release();
 		_fences[i]->Release();
 	}
-
-	//CloseHandle(_fenceEvent);
 }
 
 /*===== INIT Methods =====*/
@@ -170,23 +168,13 @@ bool D3D12Handle::CreateBackBuffer(unsigned int bufferCount)
 	/* Create a render target view for each back buffer */
 	for (int i = 0; i < bufferCount; i++)
 	{
-		/* first we get the n'th buffer in the swap chain and store it in the n'th
-		 * position of our ID3D12Resource array */
-		hr = _swapchain->GetBuffer(i, IID_PPV_ARGS(&_backbuffers[i]));
-		if (FAILED(hr))
-		{
-			printf("Failing getting DX12 swap chain buffer %d: %s\n", i, std::system_category().message(hr).c_str());
-			return false;
-		}
-
-		/* the we "create" a render target view which binds the swap chain buffer(ID3D12Resource[n]) to the rtv handle */
-		_device->CreateRenderTargetView(_backbuffers[i], nullptr, backBufferCPUHandle);
-
 		_backbufferCPUHandles[i] = backBufferCPUHandle;
 		_backbufferGPUHandles[i] = backBufferGPUHandle;
 		backBufferCPUHandle.ptr += _backbufferDescOffset;
 		backBufferGPUHandle.ptr += _backbufferDescOffset;
 	}
+
+	MakeBackBuffer();
 
 	return true;
 }
@@ -262,6 +250,71 @@ bool D3D12Handle::CreateFenceObjects(unsigned int bufferCount)
 	return true;
 }
 
+/*===== Setup Methods =====*/
+
+bool D3D12Handle::ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight)
+{
+	HRESULT hr;
+
+	int bufferCount = _backbuffers.size();
+
+	for (int i = 0; i < bufferCount; i++)
+	{
+		uint64_t fenceValueForSignal = ++_fenceValue[i];
+		_queue->Signal(_fences[i], fenceValueForSignal);
+		if (_fences[i]->GetCompletedValue() < _fenceValue[i])
+		{
+			_fences[i]->SetEventOnCompletion(fenceValueForSignal, _fenceEvent);
+			WaitForSingleObject(_fenceEvent, INFINITE);
+		}
+	}
+
+	for (int i = 0; i < bufferCount; i++)
+	{
+		if (_backbuffers[i])
+			_backbuffers[i]->Release();
+	}
+
+	hr = _swapchain->ResizeBuffers(bufferCount, windowWidth, windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, NULL);
+	if (FAILED(hr))
+	{
+		printf("Failing resizing DX12 swap chain buffer: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	return MakeBackBuffer();
+}
+
+
+bool D3D12Handle::MakeBackBuffer()
+{
+	D3D12_CPU_DESCRIPTOR_HANDLE backBufferCPUHandle(_backBufferDescHeap->GetCPUDescriptorHandleForHeapStart());
+	HRESULT hr;
+
+	int bufferCount = _backbuffers.size();
+
+	/* Create a render target view for each back buffer */
+	for (int i = 0; i < bufferCount; i++)
+	{
+		/* first we get the n'th buffer in the swap chain and store it in the n'th
+		 * position of our ID3D12Resource array */
+		hr = _swapchain->GetBuffer(i, IID_PPV_ARGS(&_backbuffers[i]));
+		if (FAILED(hr))
+		{
+			printf("Failing getting DX12 swap chain buffer %d: %s\n", i, std::system_category().message(hr).c_str());
+			return false;
+		}
+
+		/* the we "create" a render target view which binds the swap chain buffer(ID3D12Resource[n]) to the rtv handle */
+		_device->CreateRenderTargetView(_backbuffers[i], nullptr, backBufferCPUHandle);
+
+		backBufferCPUHandle.ptr += _backbufferDescOffset;
+	}
+
+	return true;
+}
+
+
 /*===== Runtime Methods =====*/
 bool D3D12Handle::WaitForPrevFrame(UINT& currFrameIndex_)
 {
@@ -336,6 +389,22 @@ bool D3D12Handle::EndDrawing(UINT& currFrameIndex_)
 		printf("Failing close cmd list: %s\n", std::system_category().message(hr).c_str());
 		return false;
 	}
+
+	return true;
+}
+
+bool D3D12Handle::Render(UINT& currFrameIndex_)
+{
+	HRESULT hr;
+
+	hr = _queue->Signal(_fences[currFrameIndex_], _fenceValue[currFrameIndex_]);
+	if (FAILED(hr))
+	{
+		printf("Failing signal: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	_swapchain->Present(0, 0);
 
 	return true;
 }

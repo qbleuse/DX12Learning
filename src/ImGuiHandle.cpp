@@ -47,6 +47,15 @@ ImGuiHandle::~ImGuiHandle()
 
 }
 
+void ImGuiHandle::Terminate()
+{
+    _imguiHeapDesc->Release();
+
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+}
+
 /*===== INIT Methods =====*/
 
 bool ImGuiHandle::Init(GLFWwindow* window, const D3D12Handle& dx12Handle)
@@ -103,7 +112,7 @@ bool ImGuiHandle::Init(GLFWwindow* window, const D3D12Handle& dx12Handle)
     _barrier.Flags  = D3D12_RESOURCE_BARRIER_FLAG_NONE;
     _barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-    _backbuffers            = dx12Handle._backbuffers;
+    _backbuffers            = &(dx12Handle._backbuffers);
     _backbufferCPUHandles   = dx12Handle._backbufferCPUHandles;
 
     return true;
@@ -119,7 +128,7 @@ bool ImGuiHandle::NewFrame(UINT& currFrameIndex_)
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    _barrier.Transition.pResource   = _backbuffers[currFrameIndex_];
+    _barrier.Transition.pResource   = (*_backbuffers)[currFrameIndex_];
     _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
     _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
     

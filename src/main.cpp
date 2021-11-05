@@ -22,10 +22,16 @@ static void glfw_error_callback(int error, const char* description)
 	fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+void glfw_WindowSize_callback(GLFWwindow* window, int width, int height)
+{
+    D3D12Handle* handle = (D3D12Handle*)glfwGetWindowUserPointer(window);
+
+    if (handle)
+        handle->ResizeBuffer(width, height);
+}
+
 int main()
 {
-    HRESULT hr;
-
     /*===== Setup GLFW window =====*/
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -33,6 +39,7 @@ int main()
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "DX12Example", NULL, NULL);
+    glfwSetWindowSizeCallback(window, glfw_WindowSize_callback);
 
     /*===== Setup Dx12 =====*/
     D3D12Handle dx12handle;
@@ -40,6 +47,7 @@ int main()
     if (!dx12handle.Init(window, WINDOW_WIDTH, WINDOW_HEIGHT, FRAME_BUFFER_COUNT))
         return 1;
 
+    glfwSetWindowUserPointer(window, &dx12handle);
 
     /*==== Setup ImGui =====*/
     ImGuiHandle imGuiHandle;
@@ -81,21 +89,12 @@ int main()
             ImGui::RenderPlatformWindowsDefault(NULL, (void*)imGuiHandle._cmdLists[currFrameIndex]);
         }
 
-        hr = dx12handle._queue->Signal(dx12handle._fences[currFrameIndex], dx12handle._fenceValue[currFrameIndex]);
-        if (FAILED(hr))
-        {
-            printf("Failing signal: %s\n", std::system_category().message(hr).c_str());
+        if (!dx12handle.Render(currFrameIndex))
             break;
-        }
-
-        dx12handle._swapchain->Present(0,0);
+        
     }
 
-    imGuiHandle._imguiHeapDesc->Release();
-
-    ImGui_ImplDX12_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    imGuiHandle.Terminate();
 
     glfwDestroyWindow(window);
     glfwTerminate();

@@ -40,12 +40,15 @@ struct D3D12Handle
 		bool WaitForPrevFrame(UINT& currFrameIndex_);
 		bool StartDrawing(UINT& currFrameIndex_);
 		bool EndDrawing(UINT& currFrameIndex_);
+		bool Render(UINT& currFrameIndex_);
+		bool ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight);
 
 	private:
 
 		bool CreateDevice();
 		bool MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount);
 		bool CreateBackBuffer(unsigned int bufferCount);
+		bool MakeBackBuffer();
 		bool CreateCmdObjects(unsigned int bufferCount);
 		bool CreateFenceObjects(unsigned int bufferCount);
 };
