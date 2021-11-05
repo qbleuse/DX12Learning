@@ -72,10 +72,6 @@ bool D3D12Handle::CreateDevice()
 		return false;
 	}
 
-	//ID3D12Debug* pdx12Debug = NULL;
-	//if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&pdx12Debug))))
-	//	pdx12Debug->EnableDebugLayer();
-
 	return true;
 }
 
@@ -227,6 +223,10 @@ bool D3D12Handle::CreateCmdObjects(unsigned int bufferCount)
 		_cmdLists[i]->Close();
 	}
 
+	_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	_barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
 
 	return true;
 }
@@ -263,33 +263,79 @@ bool D3D12Handle::CreateFenceObjects(unsigned int bufferCount)
 }
 
 /*===== Runtime Methods =====*/
-bool D3D12Handle::WaitForPrevFrame()
+bool D3D12Handle::WaitForPrevFrame(UINT& currFrameIndex_)
 {
 	HRESULT hr;
 
 	/* swap between back buffer index so we draw on the correct buffer */
-	_currFrameIndex = _swapchain->GetCurrentBackBufferIndex();
+	currFrameIndex_ = _swapchain->GetCurrentBackBufferIndex();
 
 	/* if the current fence value is still less than "fenceValue", then we know the GPU has not finished executing
 	 * the command queue since it has not reached the "commandQueue->Signal(fence, fenceValue)" command */
-	if (_fences[_currFrameIndex]->GetCompletedValue() < _fenceValue[_currFrameIndex])
+	if (_fences[currFrameIndex_]->GetCompletedValue() < _fenceValue[currFrameIndex_])
 	{
 		/* set an event that triggers when fence Values are the same */
-		hr = _fences[_currFrameIndex]->SetEventOnCompletion(_fenceValue[_currFrameIndex], _fenceEvent);
+		hr = _fences[currFrameIndex_]->SetEventOnCompletion(_fenceValue[currFrameIndex_], _fenceEvent);
 		if (FAILED(hr))
 		{
-			printf("Failing creating DX12 Fence Event Complete for frame nb %u: %s\n", _currFrameIndex, std::system_category().message(hr).c_str());
+			printf("Failing creating DX12 Fence Event Complete for frame nb %u: %s\n", currFrameIndex_, std::system_category().message(hr).c_str());
 			return false;
 		}
-
-		printf("waiting\n");
 
 		/* waiting for the command queue to finish executing (executing the event created above) */
 		WaitForSingleObject(_fenceEvent, INFINITE);
 	}
 
 	/* increment fenceValue for next frame */
-	_fenceValue[_currFrameIndex]++;
+	_fenceValue[currFrameIndex_]++;
+
+	return true;
+}
+
+bool D3D12Handle::StartDrawing(UINT& currFrameIndex_)
+{
+	HRESULT hr;
+
+	hr = _cmdAllocators[currFrameIndex_]->Reset();
+	if (FAILED(hr))
+	{
+		printf("Failing reset cmd alloc: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+
+	_barrier.Transition.pResource	= _backbuffers[currFrameIndex_];
+	_barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	_barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_RENDER_TARGET;
+	hr = _cmdLists[currFrameIndex_]->Reset(_cmdAllocators[currFrameIndex_], NULL);
+
+	if (FAILED(hr))
+	{
+		printf("Failing reset cmdList: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	_cmdLists[currFrameIndex_]->ResourceBarrier(1, &_barrier);
+
+	_cmdLists[currFrameIndex_]->OMSetRenderTargets(1, &_backbufferCPUHandles[currFrameIndex_], FALSE, nullptr);
+
+	return true;
+}
+
+bool D3D12Handle::EndDrawing(UINT& currFrameIndex_)
+{
+	HRESULT hr;
+
+	_barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	_cmdLists[currFrameIndex_]->ResourceBarrier(1, &_barrier);
+
+	hr = _cmdLists[currFrameIndex_]->Close();
+	if (FAILED(hr))
+	{
+		printf("Failing close cmd list: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
 
 	return true;
 }

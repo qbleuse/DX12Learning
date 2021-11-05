@@ -30,15 +30,16 @@ struct D3D12Handle
 		std::vector<ID3D12Fence*>					_fences;
 		std::vector<size_t>							_fenceValue;
 		HANDLE										_fenceEvent;
-
-		UINT										_currFrameIndex = 0;
+		D3D12_RESOURCE_BARRIER						_barrier				= {};
 
 
 		~D3D12Handle();
 
 		bool Init(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount);
 
-		bool WaitForPrevFrame();
+		bool WaitForPrevFrame(UINT& currFrameIndex_);
+		bool StartDrawing(UINT& currFrameIndex_);
+		bool EndDrawing(UINT& currFrameIndex_);
 
 	private:
 
