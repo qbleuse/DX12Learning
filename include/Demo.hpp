@@ -4,6 +4,7 @@
 
 #include "types.hpp"
 #include "camera.hpp"
+#include "GPM/Vector3.hpp"
 
 struct ImGuiContext;
 typedef void* (*GLADloadproc)(const char* name);
@@ -11,7 +12,7 @@ typedef void* (*GLADloadproc)(const char* name);
 struct DemoInputs
 {
     float deltaTime;
-    float2 windowSize;
+    Vec3 windowSize;
     CameraInputs cameraInputs;
 };
 
