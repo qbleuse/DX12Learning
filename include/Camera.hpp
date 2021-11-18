@@ -1,6 +1,7 @@
 #pragma once
 
-#include "types.hpp"
+#include "GPM/Vector3.hpp"
+#include "GPM/Matrix4.hpp"
 
 enum CameraKeyInputFlags
 {
@@ -25,11 +26,11 @@ struct CameraInputs
 
 struct Camera
 {
-    float3 position = {};
+    GPM::Vec3 position = {};
     float pitch     = 0.f;
     float yaw       = 0.f;
     float roll      = 0.f;
 
     void UpdateFreeFly(const CameraInputs& inputs);
-    mat4 GetViewMatrix() const;
+    GPM::Mat4 GetViewMatrix() const;
 };

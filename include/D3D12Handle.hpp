@@ -7,6 +7,13 @@
 
 struct GLFWwindow;
 
+
+struct D3D12Contextual
+{
+	ID3D12GraphicsCommandList4* currCmdList			= nullptr;
+	D3D12_CPU_DESCRIPTOR_HANDLE currBackBufferHandle;
+};
+
 /* class that handles dx12 init and shut down code and keeps all necessary objects */
 struct D3D12Handle
 {
@@ -32,6 +39,8 @@ struct D3D12Handle
 		HANDLE										_fenceEvent;
 		D3D12_RESOURCE_BARRIER						_barrier				= {};
 
+
+		D3D12Contextual _context;
 
 		~D3D12Handle();
 

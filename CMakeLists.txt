@@ -26,7 +26,7 @@ ELSE()
 ENDIF(CMAKE_BUILD_TYPE MATCHES Release)
  
 # List source files
-set (MAIN_FILE "${SRC_DIR}/main.cpp")
+set (MAIN_FILE "${SRC_DIR}/main.cpp" "src/DemoRayCPU.cpp")
 
 # Add source to project executable
 add_executable (DX12Learning ${SUB_SYS} ${MAIN_FILE})

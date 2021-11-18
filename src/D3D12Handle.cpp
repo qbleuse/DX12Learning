@@ -372,6 +372,9 @@ bool D3D12Handle::StartDrawing(UINT& currFrameIndex_)
 
 	_cmdLists[currFrameIndex_]->OMSetRenderTargets(1, &_backbufferCPUHandles[currFrameIndex_], FALSE, nullptr);
 
+	_context.currCmdList			= _cmdLists[currFrameIndex_];
+	_context.currBackBufferHandle	= _backbufferCPUHandles[currFrameIndex_];
+
 	return true;
 }
 
