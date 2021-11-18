@@ -13,7 +13,11 @@ set (DEPS_SRC_FILES
     "${IMGUI_SRC}/imgui_impl_glfw.cpp"
     "${IMGUI_SRC}/imgui_tables.cpp"
     "${IMGUI_SRC}/imgui_widgets.cpp"
-    "${IMGUI_SRC}/imgui_stdlib.cpp")
+    "${IMGUI_SRC}/imgui_stdlib.cpp"
+    "${DEPS_SRC}/Intersection.cpp"
+    "${DEPS_SRC}/Plane.cpp"
+    "${DEPS_SRC}/SegmentPlane.cpp"
+    "${DEPS_SRC}/SpherePlane.cpp")
 
 target_include_directories(DX12Learning PUBLIC "${DEPS_INC}/")
 target_include_directories(DX12Learning PUBLIC "${DEPS_INC}/imgui/")
