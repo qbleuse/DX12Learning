@@ -5,7 +5,7 @@
 #include "camera.hpp"
 #include "GPM/Vector3.hpp"
 
-struct D3D12Contextual;
+struct DX12Contextual;
 struct ImGuiContext;
 typedef void* (*GLADloadproc)(const char* name);
 
@@ -14,7 +14,13 @@ struct DemoInputs
     float deltaTime;
     GPM::Vec3 windowSize;
     CameraInputs cameraInputs;
-    D3D12Contextual* renderContext;
+    const DX12Contextual& renderContext;
+
+    DemoInputs(const DX12Contextual& renderContext_):
+        renderContext { renderContext_ }
+    {
+
+    }
 };
 
 class Demo

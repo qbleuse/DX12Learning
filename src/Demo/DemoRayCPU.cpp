@@ -1,5 +1,5 @@
-#include "DemoRayCPU.hpp"
-#include "D3D12Handle.hpp"
+#include "Demo/DemoRayCPU.hpp"
+#include "DX12Handle.hpp"
 
 DemoRayCPU::~DemoRayCPU()
 {
@@ -21,5 +21,5 @@ void DemoRayCPU::UpdateAndRender(const DemoInputs& inputs)
 
     // Clear the render target by using the ClearRenderTargetView command
     const float clearColor[] = { 1.0f, 0.2f, 0.4f, 1.0f };
-    inputs.renderContext->currCmdList->ClearRenderTargetView(inputs.renderContext->currBackBufferHandle, clearColor, 0, nullptr);    
+    inputs.renderContext.currCmdList->ClearRenderTargetView(inputs.renderContext.currBackBufferHandle, clearColor, 0, nullptr);    
 }

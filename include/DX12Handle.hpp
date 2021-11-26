@@ -8,14 +8,14 @@
 struct GLFWwindow;
 
 
-struct D3D12Contextual
+struct DX12Contextual
 {
 	ID3D12GraphicsCommandList4* currCmdList			= nullptr;
 	D3D12_CPU_DESCRIPTOR_HANDLE currBackBufferHandle;
 };
 
 /* class that handles dx12 init and shut down code and keeps all necessary objects */
-struct D3D12Handle
+struct DX12Handle
 {
 	public:
 		IDXGIFactory1*								_factory				= nullptr;
@@ -40,19 +40,20 @@ struct D3D12Handle
 		D3D12_RESOURCE_BARRIER						_barrier				= {};
 
 
-		D3D12Contextual _context;
+		DX12Contextual _context;
 
-		~D3D12Handle();
+		~DX12Handle();
 
 		bool Init(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount);
 
-		bool WaitForPrevFrame(UINT& currFrameIndex_);
-		bool StartDrawing(UINT& currFrameIndex_);
-		bool EndDrawing(UINT& currFrameIndex_);
-		bool Render(UINT& currFrameIndex_);
+		bool WaitForPrevFrame();
+		bool StartDrawing();
+		bool EndDrawing();
+		bool Render();
 		bool ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight);
 
 	private:
+		UINT _currFrameIndex = 0;
 
 		bool CreateDevice();
 		bool MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount);

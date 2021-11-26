@@ -9,7 +9,10 @@
 /* GLFW */
 #include <GLFW/glfw3.h>
 
-#include "D3D12Handle.hpp"
+/* Demos */
+#include "Demo.hpp"
+
+#include "DX12Handle.hpp"
 #include "ImGuiHandle.hpp"
 
 /*==== CONSTRUCTORS =====*/
@@ -58,7 +61,7 @@ void ImGuiHandle::Terminate()
 
 /*===== INIT Methods =====*/
 
-bool ImGuiHandle::Init(GLFWwindow* window, const D3D12Handle& dx12Handle)
+bool ImGuiHandle::Init(GLFWwindow* window, const DX12Handle& dx12Handle)
 {
     HRESULT hr;
     int bufferCount = dx12Handle._backbuffers.size();
@@ -77,94 +80,46 @@ bool ImGuiHandle::Init(GLFWwindow* window, const D3D12Handle& dx12Handle)
         return false;
     }
 
-    /*===== Create the Command Allocators =====*/
-    _cmdAllocators.resize(bufferCount);
-
-    for (int i = 0; i < bufferCount; i++)
-    {
-        hr = dx12Handle._device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&_cmdAllocators[i]));
-        if (FAILED(hr))
-        {
-            printf("Failing creating DX12 command allocator nb %d: %s\n", i, std::system_category().message(hr).c_str());
-            return false;
-        }
-    }
-
-    /*===== Create the Command Lists =====*/
-    _cmdLists.resize(bufferCount);
-
-    for (int i = 0; i < bufferCount; i++)
-    {
-        hr = dx12Handle._device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, dx12Handle._cmdAllocators[i], NULL, IID_PPV_ARGS(&_cmdLists[i]));
-        if (FAILED(hr))
-        {
-            printf("Failing creating DX12 command List nb %d: %s\n", i, std::system_category().message(hr).c_str());
-            return false;
-        }
-
-        _cmdLists[i]->Close();
-    }
 
     ImGui_ImplGlfw_InitForOther(window, true);
     ImGui_ImplDX12_Init(dx12Handle._device, bufferCount, DXGI_FORMAT_R8G8B8A8_UNORM, _imguiHeapDesc, _imguiHeapDesc->GetCPUDescriptorHandleForHeapStart(), _imguiHeapDesc->GetGPUDescriptorHandleForHeapStart());
-
-    _barrier.Type   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    _barrier.Flags  = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    _barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-    _backbuffers            = &(dx12Handle._backbuffers);
-    _backbufferCPUHandles   = dx12Handle._backbufferCPUHandles;
 
     return true;
 }
 
 /*===== Runtime Methods =====*/
 
-bool ImGuiHandle::NewFrame(UINT& currFrameIndex_)
+void ImGuiHandle::NewFrame()
 {
-    HRESULT hr;
-
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-
-    _barrier.Transition.pResource   = (*_backbuffers)[currFrameIndex_];
-    _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-    _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    
-    hr = _cmdLists[currFrameIndex_]->Reset(_cmdAllocators[currFrameIndex_], NULL);
-
-    if (FAILED(hr))
-    {
-        printf("Failing reset cmdList: %s\n", std::system_category().message(hr).c_str());
-        return false;
-    }
-
-    _cmdLists[currFrameIndex_]->ResourceBarrier(1, &_barrier);
-    _cmdLists[currFrameIndex_]->OMSetRenderTargets(1, &_backbufferCPUHandles[currFrameIndex_], FALSE, nullptr);
-
-    return true;
 }
 
-bool ImGuiHandle::Render(UINT& currFrameIndex_)
+void ImGuiHandle::ChooseDemo(const std::vector<Demo*>& demos_, int& demoId_)
 {
-    HRESULT hr;
+    {
+        if (ImGui::Button("<"))
+            demoId_ = (demoId_ - 1) % (int)demos_.size();
+        ImGui::SameLine();
+        ImGui::Text("%d/%d", demoId_ + 1, (int)demos_.size());
+        ImGui::SameLine();
+        if (ImGui::Button(">"))
+            demoId_ = (demoId_ + 1) % (int)demos_.size();
+        ImGui::SameLine();
+        if (demos_.size() > 0)
+            ImGui::Text("[%s]", demos_[demoId_]->Name());
 
+        ImGui::Checkbox("ImGui demo window", &_demo_window);
+        if (_demo_window)
+            ImGui::ShowDemoWindow(&_demo_window);
+    }
+}
+
+void ImGuiHandle::Render(DX12Contextual& contextual_)
+{
     ImGui::Render();
 
-    _cmdLists[currFrameIndex_]->SetDescriptorHeaps(1, &_imguiHeapDesc);
-    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), _cmdLists[currFrameIndex_]);
-
-    _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
-    _cmdLists[currFrameIndex_]->ResourceBarrier(1, &_barrier);
-
-    hr = _cmdLists[currFrameIndex_]->Close();
-    if (FAILED(hr))
-    {
-        printf("Failing close cmd list: %s\n", std::system_category().message(hr).c_str());
-        return false;
-    }
-
-    return true;
+    contextual_.currCmdList->SetDescriptorHeaps(1, &_imguiHeapDesc);
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), contextual_.currCmdList);
 }

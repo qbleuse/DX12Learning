@@ -7,11 +7,11 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
-#include "D3D12Handle.hpp"
+#include "DX12Handle.hpp"
 
 
 /*==== CONSTRUCTORS =====*/
-D3D12Handle::~D3D12Handle()
+DX12Handle::~DX12Handle()
 {
 
 	if (_factory)
@@ -36,7 +36,7 @@ D3D12Handle::~D3D12Handle()
 
 /*===== INIT Methods =====*/
 
-bool D3D12Handle::Init(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount)
+bool DX12Handle::Init(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount)
 {
 	
 	return CreateDevice() 
@@ -46,7 +46,7 @@ bool D3D12Handle::Init(GLFWwindow* window, unsigned int windowWidth, unsigned in
 		&& CreateFenceObjects(bufferCount);
 }
 
-bool D3D12Handle::CreateDevice()
+bool DX12Handle::CreateDevice()
 {
 	HRESULT hr;
 
@@ -73,7 +73,7 @@ bool D3D12Handle::CreateDevice()
 	return true;
 }
 
-bool D3D12Handle::MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount)
+bool DX12Handle::MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount)
 {
 	HRESULT hr;
 
@@ -131,7 +131,7 @@ bool D3D12Handle::MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, un
 	return true;
 }
 
-bool D3D12Handle::CreateBackBuffer(unsigned int bufferCount)
+bool DX12Handle::CreateBackBuffer(unsigned int bufferCount)
 {
 	HRESULT hr;
 
@@ -179,7 +179,7 @@ bool D3D12Handle::CreateBackBuffer(unsigned int bufferCount)
 	return true;
 }
 
-bool D3D12Handle::CreateCmdObjects(unsigned int bufferCount)
+bool DX12Handle::CreateCmdObjects(unsigned int bufferCount)
 {
 	HRESULT hr;
 
@@ -219,7 +219,7 @@ bool D3D12Handle::CreateCmdObjects(unsigned int bufferCount)
 	return true;
 }
 
-bool D3D12Handle::CreateFenceObjects(unsigned int bufferCount)
+bool DX12Handle::CreateFenceObjects(unsigned int bufferCount)
 {
 	HRESULT hr;
 
@@ -252,7 +252,7 @@ bool D3D12Handle::CreateFenceObjects(unsigned int bufferCount)
 
 /*===== Setup Methods =====*/
 
-bool D3D12Handle::ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight)
+bool DX12Handle::ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight)
 {
 	HRESULT hr;
 
@@ -286,7 +286,7 @@ bool D3D12Handle::ResizeBuffer(unsigned int windowWidth, unsigned int windowHeig
 }
 
 
-bool D3D12Handle::MakeBackBuffer()
+bool DX12Handle::MakeBackBuffer()
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE backBufferCPUHandle(_backBufferDescHeap->GetCPUDescriptorHandleForHeapStart());
 	HRESULT hr;
@@ -316,22 +316,22 @@ bool D3D12Handle::MakeBackBuffer()
 
 
 /*===== Runtime Methods =====*/
-bool D3D12Handle::WaitForPrevFrame(UINT& currFrameIndex_)
+bool DX12Handle::WaitForPrevFrame()
 {
 	HRESULT hr;
 
 	/* swap between back buffer index so we draw on the correct buffer */
-	currFrameIndex_ = _swapchain->GetCurrentBackBufferIndex();
+	_currFrameIndex = _swapchain->GetCurrentBackBufferIndex();
 
 	/* if the current fence value is still less than "fenceValue", then we know the GPU has not finished executing
 	 * the command queue since it has not reached the "commandQueue->Signal(fence, fenceValue)" command */
-	if (_fences[currFrameIndex_]->GetCompletedValue() < _fenceValue[currFrameIndex_])
+	if (_fences[_currFrameIndex]->GetCompletedValue() < _fenceValue[_currFrameIndex])
 	{
 		/* set an event that triggers when fence Values are the same */
-		hr = _fences[currFrameIndex_]->SetEventOnCompletion(_fenceValue[currFrameIndex_], _fenceEvent);
+		hr = _fences[_currFrameIndex]->SetEventOnCompletion(_fenceValue[_currFrameIndex], _fenceEvent);
 		if (FAILED(hr))
 		{
-			printf("Failing creating DX12 Fence Event Complete for frame nb %u: %s\n", currFrameIndex_, std::system_category().message(hr).c_str());
+			printf("Failing creating DX12 Fence Event Complete for frame nb %u: %s\n", _currFrameIndex, std::system_category().message(hr).c_str());
 			return false;
 		}
 
@@ -340,16 +340,16 @@ bool D3D12Handle::WaitForPrevFrame(UINT& currFrameIndex_)
 	}
 
 	/* increment fenceValue for next frame */
-	_fenceValue[currFrameIndex_]++;
+	_fenceValue[_currFrameIndex]++;
 
 	return true;
 }
 
-bool D3D12Handle::StartDrawing(UINT& currFrameIndex_)
+bool DX12Handle::StartDrawing()
 {
 	HRESULT hr;
 
-	hr = _cmdAllocators[currFrameIndex_]->Reset();
+	hr = _cmdAllocators[_currFrameIndex]->Reset();
 	if (FAILED(hr))
 	{
 		printf("Failing reset cmd alloc: %s\n", std::system_category().message(hr).c_str());
@@ -357,10 +357,10 @@ bool D3D12Handle::StartDrawing(UINT& currFrameIndex_)
 	}
 
 
-	_barrier.Transition.pResource	= _backbuffers[currFrameIndex_];
+	_barrier.Transition.pResource	= _backbuffers[_currFrameIndex];
 	_barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
 	_barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_RENDER_TARGET;
-	hr = _cmdLists[currFrameIndex_]->Reset(_cmdAllocators[currFrameIndex_], NULL);
+	hr = _cmdLists[_currFrameIndex]->Reset(_cmdAllocators[_currFrameIndex], NULL);
 
 	if (FAILED(hr))
 	{
@@ -368,25 +368,25 @@ bool D3D12Handle::StartDrawing(UINT& currFrameIndex_)
 		return false;
 	}
 
-	_cmdLists[currFrameIndex_]->ResourceBarrier(1, &_barrier);
+	_cmdLists[_currFrameIndex]->ResourceBarrier(1, &_barrier);
 
-	_cmdLists[currFrameIndex_]->OMSetRenderTargets(1, &_backbufferCPUHandles[currFrameIndex_], FALSE, nullptr);
+	_cmdLists[_currFrameIndex]->OMSetRenderTargets(1, &_backbufferCPUHandles[_currFrameIndex], FALSE, nullptr);
 
-	_context.currCmdList			= _cmdLists[currFrameIndex_];
-	_context.currBackBufferHandle	= _backbufferCPUHandles[currFrameIndex_];
+	_context.currCmdList			= _cmdLists[_currFrameIndex];
+	_context.currBackBufferHandle	= _backbufferCPUHandles[_currFrameIndex];
 
 	return true;
 }
 
-bool D3D12Handle::EndDrawing(UINT& currFrameIndex_)
+bool DX12Handle::EndDrawing()
 {
 	HRESULT hr;
 
 	_barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-	_cmdLists[currFrameIndex_]->ResourceBarrier(1, &_barrier);
+	_cmdLists[_currFrameIndex]->ResourceBarrier(1, &_barrier);
 
-	hr = _cmdLists[currFrameIndex_]->Close();
+	hr = _cmdLists[_currFrameIndex]->Close();
 	if (FAILED(hr))
 	{
 		printf("Failing close cmd list: %s\n", std::system_category().message(hr).c_str());
@@ -396,11 +396,11 @@ bool D3D12Handle::EndDrawing(UINT& currFrameIndex_)
 	return true;
 }
 
-bool D3D12Handle::Render(UINT& currFrameIndex_)
+bool DX12Handle::Render()
 {
 	HRESULT hr;
 
-	hr = _queue->Signal(_fences[currFrameIndex_], _fenceValue[currFrameIndex_]);
+	hr = _queue->Signal(_fences[_currFrameIndex], _fenceValue[_currFrameIndex]);
 	if (FAILED(hr))
 	{
 		printf("Failing signal: %s\n", std::system_category().message(hr).c_str());

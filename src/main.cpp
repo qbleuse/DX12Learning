@@ -11,11 +11,12 @@
 #include "ImGuiHandle.hpp"
 
 /* Dx12 */
-#include "D3D12Handle.hpp"
+#include "DX12Handle.hpp"
 
 /* Demo */
 #include "Demo.hpp"
-#include "DemoRayCPU.hpp"
+#include "Demo/DemoTriangle.hpp"
+#include "Demo/DemoRayCPU.hpp"
 
 #define WINDOW_WIDTH 1800
 #define WINDOW_HEIGHT 900
@@ -28,7 +29,7 @@ static void glfw_error_callback(int error, const char* description)
 
 void glfw_WindowSize_callback(GLFWwindow* window, int width, int height)
 {
-	D3D12Handle* handle = (D3D12Handle*)glfwGetWindowUserPointer(window);
+	DX12Handle* handle = (DX12Handle*)glfwGetWindowUserPointer(window);
 
 	if (handle)
 		handle->ResizeBuffer(width, height);
@@ -46,7 +47,7 @@ int main()
 	glfwSetWindowSizeCallback(window, glfw_WindowSize_callback);
 
 	/*===== Setup Dx12 =====*/
-	D3D12Handle dx12handle;
+	DX12Handle dx12handle;
 
 	if (!dx12handle.Init(window, WINDOW_WIDTH, WINDOW_HEIGHT, FRAME_BUFFER_COUNT))
 		return 1;
@@ -59,41 +60,27 @@ int main()
 		return 1;
 	
 	/* Demo */
-	DemoInputs	demoInputs;
-	demoInputs.renderContext = &dx12handle._context;
+	DemoInputs	demoInputs(dx12handle._context);
 	int demoId = 0;
 	std::vector<Demo*> demos;
+	demos.push_back(new DemoTriangle(demoInputs,dx12handle));
 	demos.push_back(new DemoRayCPU(demoInputs));
 
 	/* Loop Var */
-	UINT		currFrameIndex = 0;
-	bool		demo_window = true;
 	bool		mouseCaptured = false;
 
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
+		imGuiHandle.NewFrame();
 
 		/* init dx12 and Imgui For Drawing */
-		if (!dx12handle.WaitForPrevFrame(currFrameIndex) 
-			|| !dx12handle.StartDrawing(currFrameIndex) 
-			|| !imGuiHandle.NewFrame(currFrameIndex))
+		if (!dx12handle.WaitForPrevFrame() 
+			|| !dx12handle.StartDrawing())
 			break;
 
 
-		
-		{
-			if (ImGui::Button("<"))
-				demoId = (demoId - 1)%(int)demos.size();
-			ImGui::SameLine();
-			ImGui::Text("%d/%d", demoId + 1, (int)demos.size());
-			ImGui::SameLine();
-			if (ImGui::Button(">"))
-				demoId = (demoId + 1)%(int)demos.size();
-			ImGui::SameLine();
-			if (demos.size()>0)
-				ImGui::Text("[%s]", demos[demoId]->Name());
-		}
+		imGuiHandle.ChooseDemo(demos, demoId);
 
 		{
 			if (ImGui::IsKeyPressed(GLFW_KEY_ESCAPE) && mouseCaptured)
@@ -109,30 +96,30 @@ int main()
 			}
 		}
 
-		ImGui::Checkbox("ImGui demo window", &demo_window);
-		if (demo_window)
-			ImGui::ShowDemoWindow(&demo_window);
-
 		demos[demoId]->UpdateAndRender(demoInputs);
 
-		if (!dx12handle.EndDrawing(currFrameIndex) || !imGuiHandle.Render(currFrameIndex))
+		imGuiHandle.Render(dx12handle._context);
+
+		if (!dx12handle.EndDrawing() )
 			break;
 
-		ID3D12CommandList* cmdLists[2] = { dx12handle._cmdLists[currFrameIndex] , imGuiHandle._cmdLists[currFrameIndex] };
+		ID3D12CommandList* cmdLists[1] = { dx12handle._context.currCmdList};
 
-		dx12handle._queue->ExecuteCommandLists(2,cmdLists);
+		dx12handle._queue->ExecuteCommandLists(1,cmdLists);
 
 		if (imGuiHandle._io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 		{
 			ImGui::UpdatePlatformWindows();
-			ImGui::RenderPlatformWindowsDefault(NULL, (void*)imGuiHandle._cmdLists[currFrameIndex]);
+			ImGui::RenderPlatformWindowsDefault(NULL, dx12handle._context.currCmdList);
 		}
 
-		if (!dx12handle.Render(currFrameIndex))
+		if (!dx12handle.Render())
 			break;
 		
 	}
 
+
+	demos.clear();
 	imGuiHandle.Terminate();
 
 	glfwDestroyWindow(window);
