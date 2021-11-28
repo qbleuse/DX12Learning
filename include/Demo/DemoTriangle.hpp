@@ -4,6 +4,7 @@
 #include "Demo.hpp"
 
 class DX12Handle;
+struct ID3D12RootSignature;
 
 class DemoTriangle final : public Demo
 {
@@ -16,4 +17,8 @@ public:
     void UpdateAndRender(const DemoInputs& inputs_) final;
 
     inline const char* Name() const final { return typeid(*this).name(); }
+
+private:
+
+    ID3D12RootSignature* _rootSignature = nullptr;
 };
