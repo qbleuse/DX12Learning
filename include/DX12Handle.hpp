@@ -23,6 +23,7 @@ struct DX12Handle
 													
 		ID3D12CommandQueue*							_queue					= nullptr;
 		IDXGISwapChain4*							_swapchain				= nullptr;
+		DXGI_SAMPLE_DESC							_sampleDesc				= {};
 													
 		ID3D12DescriptorHeap*						_backBufferDescHeap		= nullptr;
 		unsigned int								_backbufferDescOffset	= 0;

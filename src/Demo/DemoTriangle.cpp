@@ -6,14 +6,22 @@
 #include <d3dcompiler.h>
 #include "DX12Helper.hpp"
 #include "DX12Handle.hpp"
+#include "GPM/Vector3.hpp"
 
 #include "Demo/DemoTriangle.hpp"
 
+struct DemoTriangleVertex
+{
+    GPM::vec3 pos;
+    GPM::vec3 color;
+};
 
 DemoTriangle::~DemoTriangle()
 {
     if (_rootSignature)
         _rootSignature->Release();
+    if (_pso)
+        _pso->Release();
 }
 
 DemoTriangle::DemoTriangle(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
@@ -73,6 +81,48 @@ DemoTriangle::DemoTriangle(const DemoInputs& inputs_, const DX12Handle& dx12Hand
         return;
 
 
+
+    D3D12_INPUT_ELEMENT_DESC inputLayout[] =
+    {
+        { "POSITION",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(DemoTriangleVertex, pos), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        { "COLOR",      0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(DemoTriangleVertex, color), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
+    };
+
+    // fill out an input layout description structure
+    D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = {};
+
+    // we can get the number of elements in an array by "sizeof(array) / sizeof(arrayElementType)"
+    inputLayoutDesc.NumElements = sizeof(inputLayout) / sizeof(D3D12_INPUT_ELEMENT_DESC);
+    inputLayoutDesc.pInputElementDescs = inputLayout;
+
+    D3D12_RASTERIZER_DESC rasterDesc = {};
+    rasterDesc.FillMode = D3D12_FILL_MODE_SOLID;
+
+    D3D12_BLEND_DESC blenDesc = {  };
+
+    blenDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {}; // a structure to define a pso
+    psoDesc.InputLayout             = inputLayoutDesc; // the structure describing our input layout
+    psoDesc.pRootSignature          = _rootSignature; // the root signature that describes the input data this pso needs
+    psoDesc.VS                      = vertex; // structure describing where to find the vertex shader bytecode and how large it is
+    psoDesc.PS                      = pixel; // same as VS but for pixel shader
+    psoDesc.PrimitiveTopologyType   = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; // type of topology we are drawing
+    psoDesc.RTVFormats[0]           = DXGI_FORMAT_R8G8B8A8_UNORM; // format of the render target
+    psoDesc.SampleDesc              = dx12Handle_._sampleDesc; // must be the same sample description as the swapchain and depth/stencil buffer
+    psoDesc.SampleMask              = 0xffffffff; // sample mask has to do with multi-sampling. 0xffffffff means point sampling is done
+    psoDesc.RasterizerState         = rasterDesc; // a default rasterizer state.
+    psoDesc.BlendState              = blenDesc; // a default blent state.
+    psoDesc.NumRenderTargets        = 1; // we are only binding one render target
+
+    // create the pso
+    hr = dx12Handle_._device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&_pso));
+    if (FAILED(hr))
+    {
+        printf("Failing creating PSO of %s: %s\n", Name(), std::system_category().message(hr).c_str());
+        return;
+    }
 }
 
 void DemoTriangle::UpdateAndRender(const DemoInputs& inputs_)

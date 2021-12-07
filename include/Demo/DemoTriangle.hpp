@@ -21,4 +21,5 @@ public:
 private:
 
     ID3D12RootSignature* _rootSignature = nullptr;
+    ID3D12PipelineState* _pso           = nullptr;
 };

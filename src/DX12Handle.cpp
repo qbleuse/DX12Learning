@@ -100,8 +100,7 @@ bool DX12Handle::MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, uns
 
 	/* describe the multi sample, we don't use it but unfortunately,
 	we are forced to set up to default */
-	DXGI_SAMPLE_DESC sampleDesc = {};
-	sampleDesc.Count = 1;
+	_sampleDesc.Count = 1;
 
 	/* Describe the swap chain. */
 	DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
@@ -110,7 +109,7 @@ bool DX12Handle::MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, uns
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // dxgi will discard the buffer (data) after we call present
 	swapChainDesc.OutputWindow = glfwGetWin32Window(window); // handle to our window
-	swapChainDesc.SampleDesc = sampleDesc; // our multi-sampling description
+	swapChainDesc.SampleDesc = _sampleDesc; // our multi-sampling description
 	swapChainDesc.Windowed = true; // we can change to full screen later
 
 
