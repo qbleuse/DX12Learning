@@ -25,12 +25,29 @@ DX12Handle::~DX12Handle()
 	if (_backBufferDescHeap)
 		_backBufferDescHeap->Release();
 
+	int bufferCount = _backbuffers.size();
+
+	for (int i = 0; i < bufferCount; i++)
+	{
+		uint64_t fenceValueForSignal = ++_fenceValue[i];
+		_queue->Signal(_fences[i], fenceValueForSignal);
+		if (_fences[i]->GetCompletedValue() < _fenceValue[i])
+		{
+			_fences[i]->SetEventOnCompletion(fenceValueForSignal, _fenceEvent);
+			WaitForSingleObject(_fenceEvent, INFINITE);
+		}
+	}
+
 	for (int i = 0; i < _backbuffers.size(); i++)
 	{
-		_backbuffers[i]->Release();
-		_cmdAllocators[i]->Release();
-		_cmdLists[i]->Release();
-		_fences[i]->Release();
+		if (_backbuffers[i])
+			_backbuffers[i]->Release();
+		if (_cmdAllocators[i])
+			_cmdAllocators[i]->Release();
+		if (_cmdLists[i])
+			_cmdLists[i]->Release();
+		if (_fences[i])
+			_fences[i]->Release();
 	}
 }
 
@@ -55,6 +72,15 @@ bool DX12Handle::CreateDevice()
 	{
 		printf("Failing creating factory: %s\n", std::system_category().message(hr).c_str());
 		return false;
+	}
+
+	// Enable the D3D12 debug layer.
+	{
+		ID3D12Debug* debug = nullptr;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
+		{
+			debug->EnableDebugLayer();
+		}
 	}
 
 	/*=== Create the device ===*/
@@ -126,6 +152,8 @@ bool DX12Handle::MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, uns
 		return false;
 	}
 
+	_context.width = static_cast<FLOAT>(windowWidth);
+	_context.height = static_cast<FLOAT>(windowHeight);
 
 	return true;
 }
@@ -214,6 +242,10 @@ bool DX12Handle::CreateCmdObjects(unsigned int bufferCount)
 	_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 	_barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
+	_currFrameIndex					= _swapchain->GetCurrentBackBufferIndex();
+	_context.currCmdList			= _cmdLists[_currFrameIndex];
+	_context.currBackBufferHandle	= _backbufferCPUHandles[_currFrameIndex];
+	_context.currFrameIndex			= _currFrameIndex;
 
 	return true;
 }
@@ -280,6 +312,9 @@ bool DX12Handle::ResizeBuffer(unsigned int windowWidth, unsigned int windowHeigh
 		printf("Failing resizing DX12 swap chain buffer: %s\n", std::system_category().message(hr).c_str());
 		return false;
 	}
+
+	_context.width = static_cast<FLOAT>(windowWidth);
+	_context.height = static_cast<FLOAT>(windowHeight);
 
 	return MakeBackBuffer();
 }

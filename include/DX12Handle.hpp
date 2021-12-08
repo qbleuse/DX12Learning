@@ -2,7 +2,7 @@
 #define __D3D12_HANDLE__
 
 #include <vector>
-#include <d3d12.h>
+#include <d3dx12.h>
 #include <dxgi1_6.h>
 
 struct GLFWwindow;
@@ -10,12 +10,15 @@ struct GLFWwindow;
 
 struct DX12Contextual
 {
-	ID3D12GraphicsCommandList4* currCmdList			= nullptr;
+	ID3D12GraphicsCommandList4* currCmdList				= nullptr;
 	D3D12_CPU_DESCRIPTOR_HANDLE currBackBufferHandle;
+	UINT						currFrameIndex			= 0;
+	FLOAT						width					= 0;
+	FLOAT						height					= 0;
 };
 
 /* class that handles dx12 init and shut down code and keeps all necessary objects */
-struct DX12Handle
+class DX12Handle
 {
 	public:
 		IDXGIFactory1*								_factory				= nullptr;
@@ -51,6 +54,7 @@ struct DX12Handle
 		bool StartDrawing();
 		bool EndDrawing();
 		bool Render();
+		bool Signal();
 		bool ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight);
 
 	private:

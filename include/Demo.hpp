@@ -2,7 +2,7 @@
 
 #include <typeinfo>
 
-#include "camera.hpp"
+#include "Camera.hpp"
 #include "GPM/Vector3.hpp"
 
 struct DX12Contextual;
