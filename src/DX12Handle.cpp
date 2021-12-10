@@ -80,6 +80,7 @@ bool DX12Handle::CreateDevice()
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
 		{
 			debug->EnableDebugLayer();
+			debug->Release();
 		}
 	}
 
@@ -115,6 +116,8 @@ bool DX12Handle::MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, uns
 		printf("Failing creating DX12 command queue: %s\n", std::system_category().message(hr).c_str());
 		return false;
 	}
+
+	_queue->SetName(L"Queue");
 
 	/*===== Create the Swap Chain =====*/
 
@@ -267,6 +270,7 @@ bool DX12Handle::CreateFenceObjects(unsigned int bufferCount)
 			return false;
 		}
 
+		_fences[i]->SetName(L"Fence");
 		_fenceValue[i] = 0; // set the initial fence value to 0
 	}
 
@@ -339,6 +343,7 @@ bool DX12Handle::MakeBackBuffer()
 			return false;
 		}
 
+		_backbuffers[i]->SetName(L"BackBuffer");
 		/* the we "create" a render target view which binds the swap chain buffer(ID3D12Resource[n]) to the rtv handle */
 		_device->CreateRenderTargetView(_backbuffers[i], nullptr, backBufferCPUHandle);
 
@@ -368,7 +373,6 @@ bool DX12Handle::WaitForPrevFrame()
 			printf("Failing creating DX12 Fence Event Complete for frame nb %u: %s\n", _currFrameIndex, std::system_category().message(hr).c_str());
 			return false;
 		}
-
 		/* waiting for the command queue to finish executing (executing the event created above) */
 		WaitForSingleObject(_fenceEvent, INFINITE);
 	}

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <d3dx12.h>
 #include <string>
+#include <d3dx12.h>
+
 
 #ifdef SHADER_DEBUG
 #define SHADER_FLAG (D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION)
@@ -9,40 +10,36 @@
 #define SHADER_FLAG 0
 #endif
 
+class DX12Handle;
+
 namespace DX12Helper
 {
-	
-	bool CompileVertex(const std::string& shaderSource_, ID3DBlob** VS_, D3D12_SHADER_BYTECODE& shader_)
+	/* Shader */
+
+	bool CompileVertex(const std::string& shaderSource_, ID3DBlob** VS_, D3D12_SHADER_BYTECODE& shader_);
+	bool CompilePixel(const std::string& shaderSource_, ID3DBlob** PS_, D3D12_SHADER_BYTECODE& shader_);
+
+	/* Resources */
+
+	struct ResourceHelper
 	{
-        ID3DBlob* VSErr = nullptr;
+		ID3D12Resource**			buffer			= nullptr;
+		ID3D12Resource*				uploadBuffer	= nullptr;
 
-        if (FAILED(D3DCompile(shaderSource_.c_str(), shaderSource_.length(), nullptr, nullptr, nullptr, "vert", "vs_5_0", SHADER_FLAG, 0, VS_, &VSErr)))
-        {
-            printf("Failed To Compile Vertex Shader %s\n", (const char*)(VSErr->GetBufferPointer()));
-            VSErr->Release();
-            return false;
-        }
+		~ResourceHelper();
+	};
 
-        shader_.pShaderBytecode = (*VS_)->GetBufferPointer();
-        shader_.BytecodeLength = (*VS_)->GetBufferSize();
+	struct ResourceUploader
+	{
+		ID3D12Device*				device		= nullptr;
+		ID3D12GraphicsCommandList4* copyList	= nullptr;
+		ID3D12CommandQueue*			queue		= nullptr;
+		HANDLE const*				fenceEvent	= nullptr;
 
-        return true;
-	}
+		~ResourceUploader();
+	};
 
-    bool CompilePixel(const std::string& shaderSource_, ID3DBlob** PS_, D3D12_SHADER_BYTECODE& shader_)
-    {
-        ID3DBlob* PSErr = nullptr;
-
-        if (FAILED(D3DCompile(shaderSource_.c_str(), shaderSource_.length(), nullptr, nullptr, nullptr, "frag", "ps_5_0", SHADER_FLAG, 0, PS_, &PSErr)))
-        {
-            printf("Failed To Compile Vertex Shader %s\n", (const char*)(PSErr->GetBufferPointer()));
-            PSErr->Release();
-            return false;
-        }
-
-        shader_.pShaderBytecode = (*PS_)->GetBufferPointer();
-        shader_.BytecodeLength = (*PS_)->GetBufferSize();
-
-        return true;
-    }
+	bool MakeUploader(ResourceUploader& uploader_, const DX12Handle& dx12Handle_);
+	bool CreateBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, ResourceHelper& resourceData_, const ResourceUploader& uploader_);
+	bool UploadResources(const ResourceUploader& uploader_);
 }

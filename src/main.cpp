@@ -17,6 +17,7 @@
 #include "Demo.hpp"
 #include "Demo/DemoTriangle.hpp"
 #include "Demo/DemoRayCPU.hpp"
+#include "Demo/DemoQuad.hpp"
 
 #define WINDOW_WIDTH 1800
 #define WINDOW_HEIGHT 900
@@ -62,9 +63,10 @@ int main()
 	/* Demo */
 	DemoInputs	demoInputs(dx12handle._context);
 	int demoId = 0;
-	std::vector<Demo*> demos;
-	demos.push_back(new DemoTriangle(demoInputs,dx12handle));
-	demos.push_back(new DemoRayCPU(demoInputs));
+	std::vector<std::unique_ptr<Demo>> demos;
+	demos.push_back(std::make_unique<DemoTriangle>(demoInputs,dx12handle));
+	demos.push_back(std::make_unique<DemoQuad>(demoInputs, dx12handle));
+	demos.push_back(std::make_unique<DemoRayCPU>(demoInputs));
 
 	/* Loop Var */
 	bool		mouseCaptured = false;

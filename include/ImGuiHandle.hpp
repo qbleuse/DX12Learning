@@ -4,6 +4,7 @@
 #include <d3d12.h>
 #include <imgui.h>
 #include <vector>
+#include <memory>
 
 struct GLFWwindow;
 class DX12Handle;
@@ -26,7 +27,7 @@ class ImGuiHandle
 
 		bool Init(GLFWwindow* window, const DX12Handle& dx12Handle);
 		void NewFrame();
-		void ChooseDemo(const std::vector<Demo*>& demos_, int& demoId_);
+		void ChooseDemo(const std::vector<std::unique_ptr<Demo>>& demos_, int& demoId_);
 		void Render(DX12Contextual& currFrameIndex_);
 		void Terminate();
 

@@ -54,7 +54,6 @@ class DX12Handle
 		bool StartDrawing();
 		bool EndDrawing();
 		bool Render();
-		bool Signal();
 		bool ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight);
 
 	private:

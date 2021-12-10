@@ -96,7 +96,7 @@ void ImGuiHandle::NewFrame()
     ImGui::NewFrame();
 }
 
-void ImGuiHandle::ChooseDemo(const std::vector<Demo*>& demos_, int& demoId_)
+void ImGuiHandle::ChooseDemo(const std::vector<std::unique_ptr<Demo>>& demos_, int& demoId_)
 {
     {
         if (ImGui::Button("<"))

@@ -6,13 +6,13 @@
 class DX12Handle;
 struct ID3D12RootSignature;
 
-class DemoTriangle final : public Demo
+class DemoQuad final : public Demo
 {
 
 public:
 
-	~DemoTriangle() final;
-	DemoTriangle(const DemoInputs& inputs_, const DX12Handle& d3dhandle_);
+	~DemoQuad() final;
+	DemoQuad(const DemoInputs& inputs_, const DX12Handle& d3dhandle_);
 
 	void UpdateAndRender(const DemoInputs& inputs_) final;
 
@@ -20,13 +20,16 @@ public:
 
 private:
 
-	ID3D12RootSignature*        _rootSignature      = nullptr;
-	ID3D12PipelineState*        _pso                = nullptr;
-	ID3D12Resource*             _vBuffer            = nullptr;
-	D3D12_VERTEX_BUFFER_VIEW    _vBufferView;
+	ID3D12RootSignature*		_rootSignature	= nullptr;
+	ID3D12PipelineState*		_pso			= nullptr;
+	ID3D12Resource*				_vBuffer		= nullptr;
+	ID3D12Resource*				_iBuffer		= nullptr;
 
-	D3D12_VIEWPORT viewport     = {};
-	D3D12_RECT     scissorRect  = {};
+	D3D12_VERTEX_BUFFER_VIEW    _vBufferView;
+	D3D12_INDEX_BUFFER_VIEW		_iBufferView;
+
+	D3D12_VIEWPORT viewport		= {};
+	D3D12_RECT     scissorRect	= {};
 
 	bool MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
 	bool MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);

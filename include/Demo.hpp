@@ -11,23 +11,23 @@ typedef void* (*GLADloadproc)(const char* name);
 
 struct DemoInputs
 {
-    float deltaTime;
-    GPM::Vec3 windowSize;
-    CameraInputs cameraInputs;
-    const DX12Contextual& renderContext;
+	float                   deltaTime;
+	GPM::Vec3               windowSize;
+	CameraInputs            cameraInputs;
+	const DX12Contextual&   renderContext;
 
-    DemoInputs(const DX12Contextual& renderContext_):
-        renderContext { renderContext_ }
-    {
+	DemoInputs(const DX12Contextual& renderContext_):
+		renderContext { renderContext_ }
+	{
 
-    }
+	}
 };
 
 class Demo
 {
 public:
 
-    virtual ~Demo() {}
-    virtual void UpdateAndRender(const DemoInputs& inputs) = 0;
-    virtual const char* Name() const { return typeid(*this).name(); }
+	virtual ~Demo() {}
+	virtual void UpdateAndRender(const DemoInputs& inputs) = 0;
+	virtual const char* Name() const { return typeid(*this).name(); }
 };
