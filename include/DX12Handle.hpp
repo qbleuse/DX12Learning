@@ -12,6 +12,7 @@ struct DX12Contextual
 {
 	ID3D12GraphicsCommandList4* currCmdList				= nullptr;
 	D3D12_CPU_DESCRIPTOR_HANDLE currBackBufferHandle;
+	D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle;
 	UINT						currFrameIndex			= 0;
 	FLOAT						width					= 0;
 	FLOAT						height					= 0;
@@ -31,9 +32,14 @@ class DX12Handle
 		ID3D12DescriptorHeap*						_backBufferDescHeap		= nullptr;
 		unsigned int								_backbufferDescOffset	= 0;
 		std::vector<ID3D12Resource*>				_backbuffers;
-													
+
 		std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>	_backbufferCPUHandles;
 		std::vector<D3D12_GPU_DESCRIPTOR_HANDLE>	_backbufferGPUHandles;
+
+		ID3D12DescriptorHeap*						_depthBufferDescHeap	= nullptr;
+		ID3D12Resource*								_depthBuffer			= nullptr;
+		D3D12_CPU_DESCRIPTOR_HANDLE					_depthBufferCPUHandle;
+
 													
 		std::vector<ID3D12CommandAllocator*>		_cmdAllocators;
 		std::vector<ID3D12GraphicsCommandList4*>	_cmdLists;
@@ -63,6 +69,7 @@ class DX12Handle
 		bool MakeSwapChain(GLFWwindow* window, unsigned int windowWidth, unsigned int windowHeight, unsigned int bufferCount);
 		bool CreateBackBuffer(unsigned int bufferCount);
 		bool MakeBackBuffer();
+		bool MakeDepthBuffer(unsigned int windowWidth, unsigned int windowHeight);
 		bool CreateCmdObjects(unsigned int bufferCount);
 		bool CreateFenceObjects(unsigned int bufferCount);
 };

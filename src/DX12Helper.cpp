@@ -17,53 +17,53 @@
 
 bool DX12Helper::CompileVertex(const std::string& shaderSource_, ID3DBlob** VS_, D3D12_SHADER_BYTECODE& shader_)
 {
-    ID3DBlob* VSErr = nullptr;
+	ID3DBlob* VSErr = nullptr;
 
-    if (FAILED(D3DCompile(shaderSource_.c_str(), shaderSource_.length(), nullptr, nullptr, nullptr, "vert", "vs_5_0", SHADER_FLAG, 0, VS_, &VSErr)))
-    {
-        printf("Failed To Compile Vertex Shader %s\n", (const char*)(VSErr->GetBufferPointer()));
-        VSErr->Release();
-        return false;
-    }
+	if (FAILED(D3DCompile(shaderSource_.c_str(), shaderSource_.length(), nullptr, nullptr, nullptr, "vert", "vs_5_0", SHADER_FLAG, 0, VS_, &VSErr)))
+	{
+		printf("Failed To Compile Vertex Shader %s\n", (const char*)(VSErr->GetBufferPointer()));
+		VSErr->Release();
+		return false;
+	}
 
-    shader_.pShaderBytecode = (*VS_)->GetBufferPointer();
-    shader_.BytecodeLength = (*VS_)->GetBufferSize();
+	shader_.pShaderBytecode = (*VS_)->GetBufferPointer();
+	shader_.BytecodeLength = (*VS_)->GetBufferSize();
 
-    return true;
+	return true;
 }
 
 bool DX12Helper::CompilePixel(const std::string& shaderSource_, ID3DBlob** PS_, D3D12_SHADER_BYTECODE& shader_)
 {
-    ID3DBlob* PSErr = nullptr;
+	ID3DBlob* PSErr = nullptr;
 
-    if (FAILED(D3DCompile(shaderSource_.c_str(), shaderSource_.length(), nullptr, nullptr, nullptr, "frag", "ps_5_0", SHADER_FLAG, 0, PS_, &PSErr)))
-    {
-        printf("Failed To Compile Vertex Shader %s\n", (const char*)(PSErr->GetBufferPointer()));
-        PSErr->Release();
-        return false;
-    }
+	if (FAILED(D3DCompile(shaderSource_.c_str(), shaderSource_.length(), nullptr, nullptr, nullptr, "frag", "ps_5_0", SHADER_FLAG, 0, PS_, &PSErr)))
+	{
+		printf("Failed To Compile Vertex Shader %s\n", (const char*)(PSErr->GetBufferPointer()));
+		PSErr->Release();
+		return false;
+	}
 
-    shader_.pShaderBytecode = (*PS_)->GetBufferPointer();
-    shader_.BytecodeLength = (*PS_)->GetBufferSize();
+	shader_.pShaderBytecode = (*PS_)->GetBufferPointer();
+	shader_.BytecodeLength = (*PS_)->GetBufferSize();
 
-    return true;
+	return true;
 }
 
 /*===== RESOURCES =====*/
 
-DX12Helper::ResourceHelper::~ResourceHelper()
+DX12Helper::DefaultResource::~DefaultResource()
 {
 	if (uploadBuffer)
 		uploadBuffer->Release();
 }
 
-DX12Helper::ResourceUploader::~ResourceUploader()
+DX12Helper::DefaultResourceUploader::~DefaultResourceUploader()
 {
 	if (copyList)
 		copyList->Release();
 }
 
-bool DX12Helper::MakeUploader(ResourceUploader& uploader_, const DX12Handle& dx12Handle_)
+bool DX12Helper::MakeUploader(DefaultResourceUploader& uploader_, const DX12Handle& dx12Handle_)
 {
 	HRESULT hr;
 
@@ -81,7 +81,7 @@ bool DX12Helper::MakeUploader(ResourceUploader& uploader_, const DX12Handle& dx1
 	return true;
 }
 
-bool DX12Helper::CreateBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, ResourceHelper& resourceData_, const ResourceUploader& uploader_)
+bool DX12Helper::CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, DefaultResource& resourceData_, const DefaultResourceUploader& uploader_)
 {
 	HRESULT hr;
 
@@ -102,7 +102,7 @@ bool DX12Helper::CreateBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, ResourceHelpe
 
 	if (FAILED(hr))
 	{
-		printf("Failing creating vertex upload heap: %s\n", std::system_category().message(hr).c_str());
+		printf("Failing creating default buffer upload heap: %s\n", std::system_category().message(hr).c_str());
 		return false;
 	}
 
@@ -112,7 +112,7 @@ bool DX12Helper::CreateBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, ResourceHelpe
 
 	if (FAILED(hr))
 	{
-		printf("Failing creating vertex resource : %s\n", std::system_category().message(hr).c_str());
+		printf("Failing creating default buffer resource : %s\n", std::system_category().message(hr).c_str());
 		return false;
 	}
 
@@ -127,10 +127,10 @@ bool DX12Helper::CreateBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, ResourceHelpe
 
 	uploader_.copyList->ResourceBarrier(1, &barrier);
 
-    return true;
+	return true;
 }
 
-bool DX12Helper::UploadResources(const ResourceUploader& uploader_)
+bool DX12Helper::UploadResources(const DefaultResourceUploader& uploader_)
 {
 	HRESULT hr;
 
@@ -168,4 +168,87 @@ bool DX12Helper::UploadResources(const ResourceUploader& uploader_)
 
 		return true;
 	}
+}
+
+DX12Helper::ConstantResource::~ConstantResource()
+{
+	if (buffer)
+		buffer->Release();
+}
+
+bool DX12Helper::CreateCBufferHeap(UINT cbvNb, ConstantResourceUploader& uploader_)
+{
+	HRESULT hr;
+
+	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+	heapDesc.NumDescriptors = cbvNb;
+	heapDesc.Type			= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	// This flag indicates that this descriptor heap can be bound to the pipeline and that descriptors contained in it can be referenced by a root table.
+	heapDesc.Flags			= D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	hr = uploader_.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(uploader_.descHeap));
+
+	if (FAILED(hr))
+	{
+		printf("Failing creating constant buffer descriptor heap: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	return true;
+}
+
+bool DX12Helper::CreateCBuffer(const UINT bufferSize, ConstantResource& resourceData_, ConstantResourceUploader& uploader_)
+{
+	HRESULT hr;
+
+	D3D12_HEAP_PROPERTIES heapProp = {};
+	heapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	D3D12_RESOURCE_DESC resDesc = {};
+
+	resDesc.Dimension			= D3D12_RESOURCE_DIMENSION_BUFFER;
+	resDesc.SampleDesc.Count	= 1;
+	resDesc.Width				= (bufferSize + (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1)) & ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1);
+	resDesc.Height				= 1;
+	resDesc.DepthOrArraySize	= 1;
+	resDesc.MipLevels			= 1;
+	resDesc.Layout				= D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&resourceData_.buffer));
+
+	if (FAILED(hr))
+	{
+		printf("Failing creating constant buffer upload heap: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+	cbvDesc.SizeInBytes = resDesc.Width;
+
+	resourceData_.bufferCPUHandle = (*uploader_.descHeap)->GetCPUDescriptorHandleForHeapStart();
+	resourceData_.bufferCPUHandle.ptr += uploader_.descSize * uploader_.cbNb;
+
+	resourceData_.bufferGPUHandle = (*uploader_.descHeap)->GetGPUDescriptorHandleForHeapStart();
+	resourceData_.bufferGPUHandle.ptr += uploader_.descSize * uploader_.cbNb;
+
+	uploader_.cbNb++;
+
+	// Describe and create the shadow constant buffer view (CBV) and 
+	// cache the GPU descriptor handle.
+	cbvDesc.BufferLocation = resourceData_.buffer->GetGPUVirtualAddress();
+	uploader_.device->CreateConstantBufferView(&cbvDesc, resourceData_.bufferCPUHandle);
+
+	CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+	hr = resourceData_.buffer->Map(0, &readRange, &resourceData_.mapHandle);
+	if (FAILED(hr))
+	{
+		printf("Failing mapping constant buffer: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	return true;
+}
+
+void DX12Helper::UploadCBuffer(void* bufferData, UINT bufferSize, ConstantResource& resourceData_)
+{
+	memcpy(resourceData_.mapHandle, bufferData, bufferSize);
 }

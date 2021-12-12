@@ -35,7 +35,7 @@ DemoTriangle::DemoTriangle(const DemoInputs& inputs_, const DX12Handle& dx12Hand
 		return;
 
 	/* create resource uploader */
-	DX12Helper::ResourceUploader uploader;
+	DX12Helper::DefaultResourceUploader uploader;
 	if (!DX12Helper::MakeUploader(uploader, dx12Handle_))
 		return;
 
@@ -54,10 +54,10 @@ DemoTriangle::DemoTriangle(const DemoInputs& inputs_, const DX12Handle& dx12Hand
 	vertexData.SlicePitch   = vBufferSize; // also the size of our triangle vertex data
 
 	/* create resource helper and call for vertex buffer uploaded on GPU*/
-	DX12Helper::ResourceHelper helper;
+	DX12Helper::DefaultResource helper;
 	helper.buffer		= &_vBuffer;
 
-	if (!DX12Helper::CreateBuffer(&vertexData, helper, uploader))
+	if (!DX12Helper::CreateDefaultBuffer(&vertexData, helper, uploader))
 		return;
 
 	/* upload all created resources */
@@ -75,7 +75,7 @@ DemoTriangle::DemoTriangle(const DemoInputs& inputs_, const DX12Handle& dx12Hand
 bool DemoTriangle::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
 {
 	ID3DBlob* tmp;
-	std::string source = (const char*)R"(#line 45
+	std::string source = (const char*)R"(#line 78
 	struct VOut
 	{
 		float4 position : SV_POSITION;
@@ -109,7 +109,11 @@ bool DemoTriangle::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTE
 	ID3DBlob* tmp;
 
 	D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
-	rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	rootDesc.Flags =  D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | // we can deny shader stages here for better performance
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 
 
 	hr = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &tmp, &error);

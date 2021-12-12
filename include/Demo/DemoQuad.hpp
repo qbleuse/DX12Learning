@@ -2,9 +2,15 @@
 
 #include "Camera.hpp"
 #include "Demo.hpp"
+#include <array>
 
 class DX12Handle;
 struct ID3D12RootSignature;
+
+namespace DX12Helper
+{
+	struct ConstantResource;
+}
 
 class DemoQuad final : public Demo
 {
@@ -19,11 +25,15 @@ public:
 	inline const char* Name() const final { return typeid(*this).name(); }
 
 private:
+	Camera mainCamera = {};
 
 	ID3D12RootSignature*		_rootSignature	= nullptr;
 	ID3D12PipelineState*		_pso			= nullptr;
 	ID3D12Resource*				_vBuffer		= nullptr;
 	ID3D12Resource*				_iBuffer		= nullptr;
+
+	std::array<ID3D12DescriptorHeap*, FRAME_BUFFER_COUNT>			_descHeaps;
+	std::array<DX12Helper::ConstantResource, FRAME_BUFFER_COUNT>	_constantBuffers;
 
 	D3D12_VERTEX_BUFFER_VIEW    _vBufferView;
 	D3D12_INDEX_BUFFER_VIEW		_iBufferView;
@@ -31,6 +41,7 @@ private:
 	D3D12_VIEWPORT viewport		= {};
 	D3D12_RECT     scissorRect	= {};
 
+	bool MakeGeometry(const DX12Handle& dx12Handle_);
 	bool MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
 	bool MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
 };

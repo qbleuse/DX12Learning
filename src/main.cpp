@@ -1,3 +1,4 @@
+/* system */
 #include <cstdio>
 #include <system_error>
 
@@ -11,6 +12,7 @@
 #include "ImGuiHandle.hpp"
 
 /* Dx12 */
+#include "DX12Helper.hpp"
 #include "DX12Handle.hpp"
 
 /* Demo */
@@ -18,10 +20,6 @@
 #include "Demo/DemoTriangle.hpp"
 #include "Demo/DemoRayCPU.hpp"
 #include "Demo/DemoQuad.hpp"
-
-#define WINDOW_WIDTH 1800
-#define WINDOW_HEIGHT 900
-#define FRAME_BUFFER_COUNT 3
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -32,8 +30,40 @@ void glfw_WindowSize_callback(GLFWwindow* window, int width, int height)
 {
 	DX12Handle* handle = (DX12Handle*)glfwGetWindowUserPointer(window);
 
-	if (handle)
+	if (handle && width > 0 && height > 0)
 		handle->ResizeBuffer(width, height);
+}
+
+// ImGui/GLFW implementation of camera inputs
+CameraInputs getCameraInputs(bool mouseCaptured, float mouseDX, float mouseDY)
+{
+	CameraInputs cameraInputs = {};
+	if (!mouseCaptured)
+		return cameraInputs;
+
+	cameraInputs.mouseDX = mouseDX;
+	cameraInputs.mouseDY = mouseDY;
+	cameraInputs.deltaTime = ImGui::GetIO().DeltaTime;
+
+	const struct CameraKeyMapping { int key; int flag; } cameraKeyMapping[]
+	{
+		{ GLFW_KEY_W,            CAM_MOVE_FORWARD  },
+		{ GLFW_KEY_S,            CAM_MOVE_BACKWARD },
+		{ GLFW_KEY_A,            CAM_STRAFE_LEFT   },
+		{ GLFW_KEY_D,            CAM_STRAFE_RIGHT  },
+		{ GLFW_KEY_LEFT_SHIFT,   CAM_MOVE_FAST     },
+		{ GLFW_KEY_SPACE,        CAM_MOVE_UP       },
+		{ GLFW_KEY_LEFT_CONTROL, CAM_MOVE_DOWN     },
+	};
+
+	cameraInputs.keyInputsFlags = 0;
+	for (int i = 0; i < ARRAYSIZE(cameraKeyMapping); ++i)
+	{
+		CameraKeyMapping map = cameraKeyMapping[i];
+		cameraInputs.keyInputsFlags |= ImGui::IsKeyDown(map.key) ? map.flag : 0;
+	}
+
+	return cameraInputs;
 }
 
 int main()
@@ -70,6 +100,8 @@ int main()
 
 	/* Loop Var */
 	bool		mouseCaptured = false;
+	double prevMouseX = 0.0;
+	double prevMouseY = 0.0;
 
 	while (!glfwWindowShouldClose(window))
 	{
@@ -97,6 +129,23 @@ int main()
 				mouseCaptured = true;
 			}
 		}
+
+		// Compute mouse deltas
+		float mouseDX;
+		float mouseDY;
+		{
+			double mouseX;
+			double mouseY;
+			glfwGetCursorPos(window, &mouseX, &mouseY);
+			mouseDX = (float)(mouseX - prevMouseX);
+			mouseDY = (float)(mouseY - prevMouseY);
+			prevMouseX = mouseX;
+			prevMouseY = mouseY;
+		}
+
+		demoInputs.deltaTime = ImGui::GetIO().DeltaTime;
+		demoInputs.windowSize = { ImGui::GetIO().DisplaySize.x,ImGui::GetIO().DisplaySize.y };
+		demoInputs.cameraInputs = getCameraInputs(mouseCaptured, mouseDX, mouseDY);
 
 		demos[demoId]->UpdateAndRender(demoInputs);
 

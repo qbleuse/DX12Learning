@@ -21,3 +21,8 @@ inline f32 lerpf(const f32 a, const f32 b, const f32 alpha)
 {
 	return (a * (1.f - alpha)) + (b * alpha);
 }
+
+inline f32 Modulo(f32 a, f32 b)
+{
+    return fmod(a,b);
+}

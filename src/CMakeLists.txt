@@ -7,6 +7,7 @@ set (SRC_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/DX12Handle.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/DX12Helper.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ImGuiHandle.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Camera.cpp"
     "${DEMO_SRC_DIR}/DemoRayCPU.cpp"
     "${DEMO_SRC_DIR}/DemoTriangle.cpp"
     "${DEMO_SRC_DIR}/DemoQuad.cpp")

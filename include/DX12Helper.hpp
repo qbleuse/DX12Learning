@@ -21,25 +21,49 @@ namespace DX12Helper
 
 	/* Resources */
 
-	struct ResourceHelper
+	struct DefaultResource
 	{
 		ID3D12Resource**			buffer			= nullptr;
 		ID3D12Resource*				uploadBuffer	= nullptr;
 
-		~ResourceHelper();
+		~DefaultResource();
 	};
 
-	struct ResourceUploader
+	struct DefaultResourceUploader
 	{
 		ID3D12Device*				device		= nullptr;
 		ID3D12GraphicsCommandList4* copyList	= nullptr;
 		ID3D12CommandQueue*			queue		= nullptr;
 		HANDLE const*				fenceEvent	= nullptr;
 
-		~ResourceUploader();
+		~DefaultResourceUploader();
 	};
 
-	bool MakeUploader(ResourceUploader& uploader_, const DX12Handle& dx12Handle_);
-	bool CreateBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, ResourceHelper& resourceData_, const ResourceUploader& uploader_);
-	bool UploadResources(const ResourceUploader& uploader_);
+	bool MakeUploader(DefaultResourceUploader& uploader_, const DX12Handle& dx12Handle_);
+	bool CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, DefaultResource& resourceData_, const DefaultResourceUploader& uploader_);
+	bool UploadResources(const DefaultResourceUploader& uploader_);
+
+	struct ConstantResourceUploader
+	{
+		ID3D12Device*			device		= nullptr;
+		ID3D12DescriptorHeap**	descHeap	= nullptr;
+
+		const UINT descSize = 0;
+		UINT cbNb			= 0;
+	};
+
+	struct ConstantResource
+	{
+		ID3D12Resource* buffer		= nullptr;
+		void*			mapHandle	= nullptr;
+		
+		D3D12_CPU_DESCRIPTOR_HANDLE bufferCPUHandle;
+		D3D12_GPU_DESCRIPTOR_HANDLE bufferGPUHandle;
+
+		~ConstantResource();
+	};
+
+	bool CreateCBufferHeap(UINT cbvNb, ConstantResourceUploader& uploader_);
+	bool CreateCBuffer(const UINT bufferSize, ConstantResource& resourceData_, ConstantResourceUploader& uploader_);
+	void UploadCBuffer(void* bufferData, UINT bufferSize, ConstantResource& resourceData_);
 }

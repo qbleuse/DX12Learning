@@ -24,6 +24,10 @@ DX12Handle::~DX12Handle()
 		_swapchain->Release();
 	if (_backBufferDescHeap)
 		_backBufferDescHeap->Release();
+	if (_depthBufferDescHeap)
+		_depthBufferDescHeap->Release();
+	if (_depthBuffer)
+		_depthBuffer->Release();
 
 	int bufferCount = _backbuffers.size();
 
@@ -57,8 +61,9 @@ bool DX12Handle::Init(GLFWwindow* window, unsigned int windowWidth, unsigned int
 {
 	
 	return CreateDevice() 
-		&& MakeSwapChain(window, windowWidth, windowHeight, bufferCount) 
+		&& MakeSwapChain(window, windowWidth, windowHeight, bufferCount)
 		&& CreateBackBuffer(bufferCount) 
+		&& MakeDepthBuffer(windowWidth, windowHeight)
 		&& CreateCmdObjects(bufferCount)
 		&& CreateFenceObjects(bufferCount);
 }
@@ -167,7 +172,7 @@ bool DX12Handle::CreateBackBuffer(unsigned int bufferCount)
 
 	/*===== Create the Descriptor Heap =====*/
 
-   /* describe an rtv descriptor heapand create */
+   /* describe an rtv descriptor heap and create */
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc	= {};
 	rtvHeapDesc.NumDescriptors				= bufferCount;
 	rtvHeapDesc.Type						= D3D12_DESCRIPTOR_HEAP_TYPE_RTV; // it is for Render Target View
@@ -178,6 +183,20 @@ bool DX12Handle::CreateBackBuffer(unsigned int bufferCount)
 		printf("Failing creating DX12 swap chain descriptor heap: %s\n", std::system_category().message(hr).c_str());
 		return false;
 	}
+
+	/* create a depth stencil descriptor heap so we can get a pointer to the depth stencil buffer */
+	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
+	dsvHeapDesc.NumDescriptors = 1;
+	dsvHeapDesc.Type			= D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+	hr = _device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&_depthBufferDescHeap));
+	if (FAILED(hr))
+	{
+		printf("Failing creating DX12 depth stencil buffer descriptor heap: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	_depthBufferCPUHandle = _depthBufferDescHeap->GetCPUDescriptorHandleForHeapStart();
+	_context.depthBufferHandle = _depthBufferCPUHandle;
 
 	/* get the size of a descriptor in this heap descriptor sizes may vary from device to device,
 	 * which is why there is no set size and we must ask the  device to give us the size.
@@ -310,6 +329,8 @@ bool DX12Handle::ResizeBuffer(unsigned int windowWidth, unsigned int windowHeigh
 			_backbuffers[i]->Release();
 	}
 
+	_depthBuffer->Release();
+
 	hr = _swapchain->ResizeBuffers(bufferCount, windowWidth, windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, NULL);
 	if (FAILED(hr))
 	{
@@ -320,7 +341,7 @@ bool DX12Handle::ResizeBuffer(unsigned int windowWidth, unsigned int windowHeigh
 	_context.width = static_cast<FLOAT>(windowWidth);
 	_context.height = static_cast<FLOAT>(windowHeight);
 
-	return MakeBackBuffer();
+	return MakeBackBuffer() && MakeDepthBuffer(windowWidth, windowHeight);
 }
 
 
@@ -349,6 +370,51 @@ bool DX12Handle::MakeBackBuffer()
 
 		backBufferCPUHandle.ptr += _backbufferDescOffset;
 	}
+
+	return true;
+}
+
+bool DX12Handle::MakeDepthBuffer(unsigned int windowWidth_, unsigned int windowHeight_)
+{
+	HRESULT hr;
+
+	D3D12_DEPTH_STENCIL_VIEW_DESC depthStencilDesc = {};
+	depthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	depthStencilDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+
+	D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
+	depthOptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+	depthOptimizedClearValue.DepthStencil.Depth = 1.0f;
+
+	D3D12_HEAP_PROPERTIES depthHeapDesc = {};
+	depthHeapDesc.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+	D3D12_RESOURCE_DESC depthResourceDesc = {};
+	depthResourceDesc.Dimension			= D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	depthResourceDesc.Format			= DXGI_FORMAT_D32_FLOAT;
+	depthResourceDesc.Width				= windowWidth_;
+	depthResourceDesc.Height			= windowHeight_;
+	depthResourceDesc.DepthOrArraySize	= 1;
+	depthResourceDesc.SampleDesc.Count	= 1;
+	depthResourceDesc.Flags				= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+
+	hr = _device->CreateCommittedResource(
+		&depthHeapDesc,
+		D3D12_HEAP_FLAG_NONE,
+		&depthResourceDesc,
+		D3D12_RESOURCE_STATE_DEPTH_WRITE,
+		&depthOptimizedClearValue,
+		IID_PPV_ARGS(&_depthBuffer)
+	);
+
+	if (FAILED(hr))
+	{
+		printf("Failing getting DX12 depth buffer: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	_device->CreateDepthStencilView(_depthBuffer, &depthStencilDesc, _depthBufferCPUHandle);
 
 	return true;
 }
@@ -408,7 +474,7 @@ bool DX12Handle::StartDrawing()
 
 	_cmdLists[_currFrameIndex]->ResourceBarrier(1, &_barrier);
 
-	_cmdLists[_currFrameIndex]->OMSetRenderTargets(1, &_backbufferCPUHandles[_currFrameIndex], FALSE, nullptr);
+	_cmdLists[_currFrameIndex]->OMSetRenderTargets(1, &_backbufferCPUHandles[_currFrameIndex], FALSE, &_depthBufferCPUHandle);
 
 	_context.currCmdList			= _cmdLists[_currFrameIndex];
 	_context.currBackBufferHandle	= _backbufferCPUHandles[_currFrameIndex];

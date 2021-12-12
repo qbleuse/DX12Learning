@@ -3,10 +3,10 @@ inline constexpr Mat4 Transform::translation(const Vec3& t) noexcept
 {
     return
     {
-        1.f, .0f, .0f, .0f,
-        .0f, 1.f, .0f, .0f,
-        .0f, .0f, 1.f, .0f,
-        t.x, t.y, t.z, 1.f
+        1.f, .0f, .0f, t.x,
+        .0f, 1.f, .0f, t.y,
+        .0f, .0f, 1.f, t.z,
+        .0f, .0f, .0f, 1.f
     };
 }
 
@@ -18,8 +18,8 @@ inline Mat4 Transform::rotationX(const f32 angle) noexcept
     return
     {
         1.f,    .0f,        .0f,       .0f,
-        .0f,    cosAngle,   sinAngle,  .0f,
-        .0f,    -sinAngle,  cosAngle,  .0f,
+        .0f,    cosAngle,   -sinAngle,  .0f,
+        .0f,    sinAngle,  cosAngle,  .0f,
         .0f,    .0f,        .0f,       1.f
     };
 }
@@ -31,9 +31,9 @@ inline Mat4 Transform::rotationY(const f32 angle) noexcept
 
     return
     {
-        cosAngle,   .0f,    -sinAngle,  .0f,
+        cosAngle,   .0f,    sinAngle,  .0f,
         .0f,        1.f,    .0f,        .0f,
-        sinAngle,   .0f,    cosAngle,   .0f,
+        -sinAngle,   .0f,    cosAngle,   .0f,
         .0f,        .0f,    .0f,        1.f
     };
 }
@@ -45,8 +45,8 @@ inline Mat4 Transform::rotationZ(const f32 angle) noexcept
 
     return
     {
-        cosAngle,   sinAngle,   .0f,    .0f,
-        -sinAngle,  cosAngle,   .0f,    .0f,
+        cosAngle,   -sinAngle,   .0f,    .0f,
+        sinAngle,  cosAngle,   .0f,    .0f,
         .0f,        .0f,        1.f,    .0f,
         .0f,        .0f,        .0f,    1.f
     };
@@ -99,7 +99,7 @@ inline constexpr Mat4 Transform::scaling(const Vec3& s) noexcept
 
 inline Mat4 Transform::TRS(const Vec3& t, const Vec3& r, const Vec3& s) noexcept
 {
-    return translation(t) * rotation(r) * scaling(s);
+    return scaling(s) * rotation(r) * translation(t);
 }
 
  
@@ -122,10 +122,10 @@ inline constexpr Mat4 Transform::symFrustrum(const f32 right, const f32 top,
 
     return
     {
-        near_ / right, .0f,        .0f,                          .0f,
-        .0f,          near_ / top, .0f,                          .0f,
-        .0f,          .0f,        -(far_ + near_) * depthInv,    -1.f,
-        .0f,          .0f,        -2.f * far_ * near_ * depthInv, .0f
+        1.0f / right, .0f,        .0f,                          .0f,
+        .0f,          1.0f / top, .0f,                          .0f,
+        .0f,          .0f,        -(far_ + near_) * depthInv,   -2.f * far_ * near_ * depthInv ,
+        .0f,          .0f,        -1.f, .0f
     };
 }
 
@@ -133,8 +133,8 @@ inline constexpr Mat4 Transform::symFrustrum(const f32 right, const f32 top,
 inline Mat4 Transform::perspective(const f32 fovY, const f32 aspect,
                                    const f32 near_, const f32 far_) noexcept
 {
-    const f32 top{near_ * tanf(fovY / 2.f)};
-
+    const f32 top{tanf(fovY / 2.f)};
+    
     return symFrustrum(top * aspect, top, near_, far_);
 }
 
@@ -151,10 +151,10 @@ inline constexpr Mat4 Transform::orthographic(const f32 right, const f32 left, c
     const float ty = -(top + bottom) / (top - bottom);
     const float tz = -(farVal + nearVal) / (farVal - nearVal);
 
-    return {a11, 0.f, 0.f, 0.f,
-            0.f, a22, 0.f, 0.f,
-            0.f, 0.f, a33, 0.f,
-            tx, ty, tz, 1.f};
+    return {a11, 0.f, 0.f, tx,
+            0.f, a22, 0.f, ty,
+            0.f, 0.f, a33, tz,
+            0.f, 0.f, 0.f, 1.f};
 }
 
 
@@ -165,10 +165,10 @@ inline constexpr Mat4 Transform::viewport(const f32 x,     const f32 y,
 
     return
     {
-        halfWidth,     .0f,            .0f, .0f,
-        .0f,           halfHeight,     .0f, .0f,
-        .0f,           .0f,            .5f, .0f,
-        x + halfWidth, y + halfHeight, .5f, 1.f
+        halfWidth,     .0f,            .0f, x + halfWidth,
+        .0f,           halfHeight,     .0f,  y + halfHeight,
+        .0f,           .0f,            .5f, .5f,
+        .0f,            .0f,            .0f, 1.f
     };
 }
 

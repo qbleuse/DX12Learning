@@ -1,7 +1,9 @@
-
-#include "calc.hpp"
+/* system */
+#include <algorithm>
 
 #include "camera.hpp"
+#include "GPM/Transform.hpp"
+
 
 void Camera::UpdateFreeFly(const CameraInputs& inputs)
 {
@@ -13,10 +15,10 @@ void Camera::UpdateFreeFly(const CameraInputs& inputs)
     float inclination = pitch;
 
     // Spheric coordinates
-    float cosAzimuth     = calc::Cos(azimuth);
-    float sinAzimuth     = calc::Sin(azimuth);
-    float cosInclination = calc::Cos(inclination);
-    float sinInclination = calc::Sin(inclination);
+    float cosAzimuth     = std::cos(azimuth);
+    float sinAzimuth     = std::sin(azimuth);
+    float cosInclination = std::cos(inclination);
+    float sinInclination = std::sin(inclination);
 
     // Compute speed
     float speed = 4.f;
@@ -49,14 +51,15 @@ void Camera::UpdateFreeFly(const CameraInputs& inputs)
 
     // Pitch
     pitch += inputs.mouseDY * CAM_MOUSE_SENSITIVITY_Y;
-    pitch = calc::Clamp(pitch, -calc::TAU / 4.f, calc::TAU / 4.f); // Limit rotation to -90,90 range
+    pitch = GPM::clamp(pitch, -TAU / 4.f, TAU / 4.f); // Limit rotation to -90,90 range
 
     // Yaw
     yaw += inputs.mouseDX * CAM_MOUSE_SENSITIVITY_X;
-    yaw = calc::Modulo((yaw + calc::TAU) + calc::TAU / 2.f, calc::TAU) - calc::TAU / 2.f; // Loop around -180,180
+    yaw = GPM::Modulo(((yaw + TAU) + TAU / 2.f), TAU) - TAU / 2.f; // Loop around -180,180
 }
 
-mat4 Camera::GetViewMatrix() const
+GPM::mat4 Camera::GetViewMatrix() const
 {
-    return mat4RotateX(pitch) * mat4RotateY(yaw) * mat4RotateZ(roll) * mat4Translate(-position);
+    return GPM::Transform::translation(-position) * GPM::Transform::rotationY(yaw) * GPM::Transform::rotationX(pitch) * GPM::Transform::rotationZ(roll);
+    //return GPM::Transform::rotationZ(roll) * GPM::Transform::rotationX(pitch) * GPM::Transform::rotationY(yaw) * GPM::Transform::translation(-position);
 }

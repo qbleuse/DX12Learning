@@ -2,6 +2,8 @@
 
 #include <typeinfo>
 
+/* define */
+#include "define.h"
 #include "Camera.hpp"
 #include "GPM/Vector3.hpp"
 

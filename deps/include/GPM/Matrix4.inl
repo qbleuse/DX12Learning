@@ -191,12 +191,20 @@ inline constexpr Matrix4& Matrix4::operator/=(const f32 k) noexcept
 
 inline constexpr Vec4 Matrix4::operator*(const Vec4& v) const noexcept
 {
+    //return
+    //{
+    //    (e[0] * v.xyz.x) + (e[4] * v.xyz.y) + (e[8] * v.xyz.z) + (e[12] * v.w),
+    //    (e[1] * v.xyz.x) + (e[5] * v.xyz.y) + (e[9] * v.xyz.z) + (e[13] * v.w),
+    //    (e[2] * v.xyz.x) + (e[6] * v.xyz.y) + (e[10] * v.xyz.z) + (e[14] * v.w),
+    //    (e[3] * v.xyz.x) + (e[7] * v.xyz.y) + (e[11] * v.xyz.z) + (e[15] * v.w)
+    //};
+
     return
     {
-        (e[0] * v.xyz.x) + (e[4] * v.xyz.y) + (e[8] * v.xyz.z) + (e[12] * v.w),
-        (e[1] * v.xyz.x) + (e[5] * v.xyz.y) + (e[9] * v.xyz.z) + (e[13] * v.w),
-        (e[2] * v.xyz.x) + (e[6] * v.xyz.y) + (e[10] * v.xyz.z) + (e[14] * v.w),
-        (e[3] * v.xyz.x) + (e[7] * v.xyz.y) + (e[11] * v.xyz.z) + (e[15] * v.w)
+        (e[0] * v.xyz.x) + (e[1] * v.xyz.y) + (e[2] * v.xyz.z) + (e[3] * v.w),
+        (e[4] * v.xyz.x) + (e[5] * v.xyz.y) + (e[6] * v.xyz.z) + (e[7] * v.w),
+        (e[8] * v.xyz.x) + (e[9] * v.xyz.y) + (e[10] * v.xyz.z) + (e[11] * v.w),
+        (e[12] * v.xyz.x) + (e[13] * v.xyz.y) + (e[14] * v.xyz.z) + (e[15] * v.w)
     };
 }
 
