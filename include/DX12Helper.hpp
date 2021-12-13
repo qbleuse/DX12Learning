@@ -66,4 +66,8 @@ namespace DX12Helper
 	bool CreateCBufferHeap(UINT cbvNb, ConstantResourceUploader& uploader_);
 	bool CreateCBuffer(const UINT bufferSize, ConstantResource& resourceData_, ConstantResourceUploader& uploader_);
 	void UploadCBuffer(void* bufferData, UINT bufferSize, ConstantResource& resourceData_);
+
+	/* Texture */
+	bool LoadTexture(const std::string& filePath_, BYTE** texdata_, D3D12_RESOURCE_DESC& texDesc_);
+
 }
