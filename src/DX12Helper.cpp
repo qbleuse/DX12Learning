@@ -272,16 +272,41 @@ bool LoadTexture(const std::string& filePath_, BYTE** texdata_, D3D12_RESOURCE_D
 
 	int byteSize = width * height * channels * sizeof(BYTE);
 
+	DXGI_FORMAT dxgiFormat = DXGI_FORMAT_UNKNOWN;
+
+	switch (channels)
+	{
+		case 1: dxgiFormat = DXGI_FORMAT_R8_UNORM; break;
+		case 2: dxgiFormat = DXGI_FORMAT_R8G8_UNORM; break;
+			/* there is no 3-bytes dxgi type in d3d12 (gpu does not support anymore), expanding to 4 */
+		case 3: 
+			dxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+			int arraySize = width * height * 4;
+			BYTE* temp = *texdata_;
+			*texdata_ = malloc(arraySize);
+			
+			for (int i = 0, int j = 0; i < arraySize; i += 4, j+=3)
+			{
+				*texdata_[i]		= temp[j];
+				*texdata_[i+1]		= temp[j+1];
+				*texdata_[i+2]		= temp[j+2];
+#undef max
+				*texdata_[i + 2]	= std::numeric_limits<BYTE>().max();
+			}
+			break;
+		default dxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM; break;
+	}
+
 	texDesc_ = {};
-	texDesc_.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	texDesc_.Alignment = 0; // may be 0, 4KB, 64KB, or 4MB. 0 will let runtime decide between 64KB and 4MB (4MB for multi-sampled textures)
-	texDesc_.Width = width; // width of the texture
-	texDesc_.Height = height; // height of the texture
-	texDesc_.DepthOrArraySize = 1; // if 3d image, depth of 3d image. Otherwise an array of 1D or 2D textures (we only have one image, so we set 1)
-	texDesc_.MipLevels = 1; // Number of mipmaps. We are not generating mipmaps for this texture, so we have only one level
-	texDesc_.Format = dxgiFormat; // This is the dxgi format of the image (format of the pixels)
-	texDesc_.SampleDesc.Count = 1; // This is the number of samples per pixel, we just want 1 sample
-	texDesc_.SampleDesc.Quality = 0; // The quality level of the samples. Higher is better quality, but worse performance
-	texDesc_.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN; // The arrangement of the pixels. Setting to unknown lets the driver choose the most efficient one
-	texDesc_.Flags = D3D12_RESOURCE_FLAG_NONE; // no flags
+	texDesc_.Dimension			= D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	texDesc_.Alignment			= 0;		// may be 0, 4KB, 64KB, or 4MB. 0 will let runtime decide between 64KB and 4MB (4MB for multi-sampled textures)
+	texDesc_.Width				= width;	// width of the texture
+	texDesc_.Height				= height;	// height of the texture
+	texDesc_.DepthOrArraySize	= 1;		// if 3d image, depth of 3d image. Otherwise an array of 1D or 2D textures (we only have one image, so we set 1)
+	texDesc_.MipLevels			= 1;		// Number of mipmaps. We are not generating mipmaps for this texture, so we have only one level
+	texDesc_.Format				= dxgiFormat; // This is the dxgi format of the image (format of the pixels)
+	texDesc_.SampleDesc.Count	= 1;		// This is the number of samples per pixel, we just want 1 sample
+	texDesc_.SampleDesc.Quality = 0;		// The quality level of the samples. Higher is better quality, but worse performance
+	texDesc_.Layout				= D3D12_TEXTURE_LAYOUT_UNKNOWN; // The arrangement of the pixels. Setting to unknown lets the driver choose the most efficient one
+	texDesc_.Flags				= D3D12_RESOURCE_FLAG_NONE; // no flags
 }
