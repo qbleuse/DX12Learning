@@ -263,8 +263,8 @@ void DX12Helper::UploadCBuffer(void* bufferData, UINT bufferSize, ConstantResour
 
 DX12Helper::TextureResource::~TextureResource()
 {
-	if (texData)
-		stbi_image_free(texData);
+	if (texData.pData)
+		stbi_image_free((void*)texData.pData);
 	if (uploadBuffer)
 		uploadBuffer->Release();
 }
@@ -278,33 +278,37 @@ void DX12Helper::LoadTexture(const std::string& filePath_, D3D12_SUBRESOURCE_DAT
 
 	stbi_set_flip_vertically_on_load(1);
 
-	texData_.pData = stbi_load(filePath_.c_str(), &width, &height, &channels, 0);
+	BYTE* tex = stbi_load(filePath_.c_str(), &width, &height, &channels, 0);
 
 	DXGI_FORMAT dxgiFormat = DXGI_FORMAT_UNKNOWN;
 
 	switch (channels)
 	{
-		case 1: dxgiFormat = DXGI_FORMAT_R8_UNORM; break;
-		case 2: dxgiFormat = DXGI_FORMAT_R8G8_UNORM; break;
+		case 1: { dxgiFormat = DXGI_FORMAT_R8_UNORM; break; }
+		case 2: { dxgiFormat = DXGI_FORMAT_R8G8_UNORM; break; }
 			/* there is no 3-bytes dxgi type in d3d12 (gpu does not support anymore), expanding to 4 */
-		case 3: 
+		case 3:
+		{
 			int arraySize = width * height * 4;
-			BYTE* temp = texData_.pData;
-			texData_.pData = malloc(arraySize);
-			
-			for (int i = 0, int j = 0; i < arraySize; i += 4, j+=3)
+			BYTE* old = tex;
+			tex = (BYTE*)malloc(arraySize);
+			BYTE max = std::numeric_limits<BYTE>().max();
+
+			for (int i = 0, j = 0; i < arraySize; i += 4, j += 3)
 			{
-				texData_.pData[i]		= temp[j];
-				texData_.pData[i+1]		= temp[j+1];
-				texData_.pData[i+2]		= temp[j+2];
-				texData_.pData[i + 2]	= std::numeric_limits<BYTE>().max();
+				tex[i]		= old[j];
+				tex[i + 1]	= old[j + 1];
+				tex[i + 2]	= old[j + 2];
+				tex[i + 3]	= max;
 			}
 
-			stbi_image_free(temp);
+			stbi_image_free(old);
 			channels = 4;
-		default dxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM; break;
-	}
+		}
+		default: { dxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM; break; }
+	};
 
+	texData_.pData		= tex;
 	texData_.RowPitch	= width * channels * sizeof(BYTE);
 	texData_.SlicePitch = texData_.RowPitch * height;
 
@@ -326,9 +330,11 @@ bool DX12Helper::CreateTexture(const std::string& filePath_, TextureResource& re
 {
 	HRESULT hr;
 
+	/* load texture Data */
 	D3D12_RESOURCE_DESC texDesc = {};
 	LoadTexture(filePath_, resourceData_.texData, texDesc);
 
+	/* create upload heap to send texture info to default */
 	D3D12_HEAP_PROPERTIES heapProp = {};
 	heapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
 
@@ -350,6 +356,7 @@ bool DX12Helper::CreateTexture(const std::string& filePath_, TextureResource& re
 		return false;
 	}
 
+	/* create default heap, technically the last place where the texture will be sent */
 	heapProp.Type = D3D12_HEAP_TYPE_DEFAULT;
 
 	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(resourceData_.buffer));
@@ -360,6 +367,7 @@ bool DX12Helper::CreateTexture(const std::string& filePath_, TextureResource& re
 		return false;
 	}
 
+	/* uploading and barrier for making the application wait for the ressource to be uploaded on gpu */
 	UpdateSubresources(uploader_.copyList, *resourceData_.buffer, resourceData_.uploadBuffer, 0, 0, 1, &resourceData_.texData);
 
 	D3D12_RESOURCE_BARRIER barrier = {};
@@ -371,4 +379,15 @@ bool DX12Helper::CreateTexture(const std::string& filePath_, TextureResource& re
 
 	uploader_.copyList->ResourceBarrier(1, &barrier);
 
+
+	/* make the shader resource view from buffer and texDesc to make it available to use */
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping			= D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format							= texDesc.Format;
+	srvDesc.ViewDimension					= D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels				= 1;
+
+	uploader_.device->CreateShaderResourceView(*resourceData_.buffer, &srvDesc, resourceData_.srvHandle);
+
+	return true;
 }

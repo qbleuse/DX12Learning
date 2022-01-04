@@ -32,8 +32,11 @@ private:
 	ID3D12Resource*				_vBuffer		= nullptr;
 	ID3D12Resource*				_iBuffer		= nullptr;
 
-	std::array<ID3D12DescriptorHeap*, FRAME_BUFFER_COUNT>			_descHeaps;
-	std::array<DX12Helper::ConstantResource, FRAME_BUFFER_COUNT>	_constantBuffers;
+	std::array<ID3D12DescriptorHeap*,			FRAME_BUFFER_COUNT> _descHeaps;
+	std::array<DX12Helper::ConstantResource,	FRAME_BUFFER_COUNT>	_constantBuffers;
+
+	ID3D12DescriptorHeap*		_mainDescriptorHeap = nullptr;
+	ID3D12Resource*				_textureResource	= nullptr;
 
 	D3D12_VERTEX_BUFFER_VIEW    _vBufferView;
 	D3D12_INDEX_BUFFER_VIEW		_iBufferView;
@@ -44,4 +47,5 @@ private:
 	bool MakeGeometry(const DX12Handle& dx12Handle_);
 	bool MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
 	bool MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
+	bool MakeTexture(const DX12Handle& dx12Handle_);
 };

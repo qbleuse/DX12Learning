@@ -1,7 +1,7 @@
 /* system */
 #include <algorithm>
 
-#include "camera.hpp"
+#include "Camera.hpp"
 #include "GPM/Transform.hpp"
 
 

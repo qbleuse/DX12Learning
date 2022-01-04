@@ -10,6 +10,7 @@ set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(DEPS_DIR "${CMAKE_SOURCE_DIR}/deps")
 set(LIB_DIR "${DEPS_DIR}/lib")
 set(INC_DIR "${CMAKE_SOURCE_DIR}/include")
+set(RESOURCE_DIR "/media")
 
 include_directories("${INC_DIR}/")
 
@@ -38,3 +39,9 @@ target_link_libraries(DX12Learning "${LIB_DIR}/glfw3.lib")
 # Add sub projects.
 add_subdirectory(${SRC_DIR})
 add_subdirectory(${DEPS_DIR})
+
+# copies the media file
+add_custom_command(TARGET DX12Learning POST_BUILD COMMAND 
+    ${CMAKE_COMMAND} -E copy_directory 
+        ${CMAKE_SOURCE_DIR}/${RESOURCE_DIR} 
+        ${CMAKE_CURRENT_BINARY_DIR}/${RESOURCE_DIR})

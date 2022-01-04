@@ -14,6 +14,7 @@
 struct DemoQuadVertex
 {
 	GPM::vec3 pos;
+	GPM::vec2 uv;
 };
 
 struct DemoQuadConstantBuffer
@@ -32,6 +33,10 @@ DemoQuad::~DemoQuad()
 		_vBuffer->Release();
 	if (_iBuffer)
 		_iBuffer->Release();
+	if (_mainDescriptorHeap)
+		_mainDescriptorHeap->Release();
+	if (_textureResource)
+		_textureResource->Release();
 
 	for (int i = 0; i < _descHeaps.size(); i++)
 	{
@@ -50,7 +55,7 @@ DemoQuad::DemoQuad(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
 	if (!MakeShader(vertex, pixel) || !MakePipeline(dx12Handle_, vertex, pixel))
 		return;
 
-	if (!MakeGeometry(dx12Handle_))
+	if (!MakeGeometry(dx12Handle_) || !MakeTexture(dx12Handle_))
 		return;
 
 	for (int i = 0; i < _descHeaps.size(); i++)
@@ -73,10 +78,11 @@ DemoQuad::DemoQuad(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
 bool DemoQuad::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
 {
 	ID3DBlob* tmp;
-	std::string source = (const char*)R"(#line 73
+	std::string source = (const char*)R"(#line 81
 	struct VOut
 	{
 		float4 position : SV_POSITION;
+		float2 uv : UV;
 	};
 
 	cbuffer ConstantBuffer : register(b0)
@@ -85,19 +91,23 @@ bool DemoQuad::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& 
 		float4x4 view;
 	};	
 
-	VOut vert(float3 position : POSITION)
+	VOut vert(float3 position : POSITION, float2 uv : UV)
 	{
 		VOut output;
 	
-		float4 outPos = mul(float4(position,1.0),view);
+		float4 outPos	= mul(float4(position,1.0),view);
 		output.position = mul(outPos,perspective);
+		output.uv		= uv;
 	
 		return output;
 	}
 
-	float4 frag(float4 position : SV_POSITION) : SV_TARGET
+	Texture2D tex : register(t0);
+	SamplerState wrap : register(s0);
+
+	float4 frag(float4 position : SV_POSITION, float2 uv : UV) : SV_TARGET
 	{
-		return float4(1.0f,1.0f,1.0f,1.0f);
+		return tex.Sample(wrap,uv);
 	}
 	)";
 
@@ -116,10 +126,10 @@ bool DemoQuad::MakeGeometry(const DX12Handle& dx12Handle_)
 	/* create vertex buffer resources */
 	DemoQuadVertex triangle[] =
 	{
-		{{ -0.5f,  0.5f, -0.5f }}, // top left
-		{{  0.5f, -0.5f, -0.5f }}, // bottom right
-		{{ -0.5f, -0.5f, -0.5f }}, // bottom left
-		{{  0.5f,  0.5f, -0.5f }}  // top right
+		{{ -0.5f,  0.5f, -0.5f }, {0.0f, 1.0f}}, // top left
+		{{  0.5f, -0.5f, -0.5f }, {1.0f, 0.0f}}, // bottom right
+		{{ -0.5f, -0.5f, -0.5f }, {0.0f, 0.0f}}, // bottom left
+		{{  0.5f,  0.5f, -0.5f }, {1.0f, 1.0f}}  // top right
 	};
 
 	int vBufferSize = sizeof(triangle);
@@ -172,31 +182,87 @@ bool DemoQuad::MakeGeometry(const DX12Handle& dx12Handle_)
 	return true;
 }
 
+bool DemoQuad::MakeTexture(const DX12Handle& dx12Handle_)
+{
+	HRESULT hr;
+
+	/* create the descriptor heap that will store our srv */
+	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+	heapDesc.NumDescriptors = 1;
+	heapDesc.Flags			= D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	heapDesc.Type			= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	hr = dx12Handle_._device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_mainDescriptorHeap));
+
+	if (FAILED(hr))
+	{
+		printf("Failing creating main descriptor heap for %s: %s\n", Name(), std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	DX12Helper::DefaultResourceUploader uploader;
+	if (!DX12Helper::MakeUploader(uploader, dx12Handle_))
+		return false;
+
+	DX12Helper::TextureResource texture;
+	texture.buffer		= &_textureResource;
+	texture.srvHandle	= _mainDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
+	if (!DX12Helper::CreateTexture("media/container.jpg", texture, uploader))
+		return false;
+
+	if (!DX12Helper::UploadResources(uploader))
+		return false;
+
+	return true;
+}
+
 bool DemoQuad::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
 {
 	HRESULT hr;
 	ID3DBlob* error;
 	ID3DBlob* tmp;
 
-	// create a root descriptor, which explains where to find the data for this root parameter
-	D3D12_ROOT_DESCRIPTOR rootCBVDescriptor;
-	rootCBVDescriptor.RegisterSpace		= 0;
-	rootCBVDescriptor.ShaderRegister	= 0;
+	/* texture descriptor */
+	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[1] = {};
+	descriptorTableRanges[0].RangeType							= D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorTableRanges[0].NumDescriptors						= 1;
+	descriptorTableRanges[0].OffsetInDescriptorsFromTableStart	= D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	// create a root parameter and fill it out
-	D3D12_ROOT_PARAMETER  rootParameters[1]; // only one parameter right now
-	rootParameters[0].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_CBV; // this is a constant buffer view root descriptor
-	rootParameters[0].Descriptor		= rootCBVDescriptor; // this is the root descriptor for this root parameter
-	rootParameters[0].ShaderVisibility	= D3D12_SHADER_VISIBILITY_VERTEX; // our pixel shader will be the only shader accessing this parameter for now
+	/* create a descriptor table */
+	D3D12_ROOT_DESCRIPTOR_TABLE descriptorTable;
+	descriptorTable.NumDescriptorRanges = _countof(descriptorTableRanges);
+	descriptorTable.pDescriptorRanges	= &descriptorTableRanges[0];
+
+	/* create a root descriptor, which explains where to find the data for this root parameter */
+	D3D12_ROOT_DESCRIPTOR rootCBVDescriptor = {};
+
+	/* create a root parameter and fill it out, cbv in 0, srv in 1 */
+	D3D12_ROOT_PARAMETER  rootParameters[2];
+	rootParameters[0].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[0].Descriptor		= rootCBVDescriptor;
+	rootParameters[0].ShaderVisibility	= D3D12_SHADER_VISIBILITY_VERTEX;
+	rootParameters[1].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParameters[1].DescriptorTable	= descriptorTable;
+	rootParameters[1].ShaderVisibility	= D3D12_SHADER_VISIBILITY_PIXEL;
+
+	/* create a static sampler */
+	D3D12_STATIC_SAMPLER_DESC sampler = {};
+	sampler.AddressU			= D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressV			= D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressW			= D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.ComparisonFunc		= D3D12_COMPARISON_FUNC_NEVER;
+	sampler.MaxLOD				= D3D12_FLOAT32_MAX;
+	sampler.ShaderVisibility	= D3D12_SHADER_VISIBILITY_PIXEL;
 
 	D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
-	rootDesc.NumParameters	= _countof(rootParameters);
-	rootDesc.pParameters	= rootParameters;
+	rootDesc.NumParameters		= _countof(rootParameters);
+	rootDesc.pParameters		= rootParameters;
+	rootDesc.NumStaticSamplers	= 1;
+	rootDesc.pStaticSamplers	= &sampler;
 	rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | // we can deny shader stages here for better performance
 		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
 		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-		D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
 
 	hr = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &tmp, &error);
 
@@ -218,6 +284,7 @@ bool DemoQuad::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
 	{
 		{ "POSITION",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(DemoQuadVertex, pos), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "UV",			0, DXGI_FORMAT_R32G32_FLOAT,	0, offsetof(DemoQuadVertex, uv), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 
 	// fill out an input layout description structure
@@ -294,6 +361,9 @@ void DemoQuad::UpdateAndRender(const DemoInputs& inputs_)
 	inputs_.renderContext.currCmdList->RSSetViewports(1, &viewport); // set the viewports
 	inputs_.renderContext.currCmdList->RSSetScissorRects(1, &scissorRect); // set the scissor rects
 	inputs_.renderContext.currCmdList->SetGraphicsRootConstantBufferView(0, _constantBuffers[inputs_.renderContext.currFrameIndex].buffer->GetGPUVirtualAddress());
+	inputs_.renderContext.currCmdList->SetDescriptorHeaps(1, &_mainDescriptorHeap); // set the descriptor heap
+	// set the descriptor table to the descriptor heap (parameter 1, as constant buffer root descriptor is parameter index 0)
+	inputs_.renderContext.currCmdList->SetGraphicsRootDescriptorTable(1, _mainDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	inputs_.renderContext.currCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // set the primitive topology
 	inputs_.renderContext.currCmdList->IASetVertexBuffers(0, 1, &_vBufferView); // set the vertex buffer (using the vertex buffer view)

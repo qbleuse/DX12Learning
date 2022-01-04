@@ -69,8 +69,9 @@ namespace DX12Helper
 
 	struct TextureResource
 	{
-		ID3D12Resource**	buffer			= nullptr;
-		ID3D12Resource*		uploadBuffer	= nullptr;
+		ID3D12Resource**				buffer			= nullptr;
+		ID3D12Resource*					uploadBuffer	= nullptr;
+		D3D12_CPU_DESCRIPTOR_HANDLE		srvHandle;
 
 		D3D12_SUBRESOURCE_DATA texData;
 
