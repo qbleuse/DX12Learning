@@ -478,6 +478,7 @@ bool DX12Handle::StartDrawing()
 
 	_context.currCmdList			= _cmdLists[_currFrameIndex];
 	_context.currBackBufferHandle	= _backbufferCPUHandles[_currFrameIndex];
+	_context.currBackBuffer			= _backbuffers[_currFrameIndex];
 
 	return true;
 }

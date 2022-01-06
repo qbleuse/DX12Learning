@@ -3,6 +3,9 @@
 #include "Camera.hpp"
 #include "Demo.hpp"
 
+struct ID3D12Resource;
+class DX12Handle;
+
 class DemoRayCPU final : public Demo
 {
     protected:
@@ -11,12 +14,18 @@ class DemoRayCPU final : public Demo
 	public:
 
     ~DemoRayCPU() final;
-    DemoRayCPU();
-    DemoRayCPU(const DemoInputs& inputs);
+    DemoRayCPU(const DemoInputs& inputs, const DX12Handle& dx12Handle_);
 
     void UpdateAndRender(const DemoInputs& inputs) final;
 
     const char* Name() const final { return typeid(*this).name(); }
 
-    // TODO: Generer GPU texture
+
+    bool MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Handle_);
+
+    /* GPU Texture */
+    ID3D12Resource* gpuTexture;
+
+    /* CPU Texture */
+    BYTE* cpuTexture;
 };

@@ -48,4 +48,7 @@ private:
 	bool MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
 	bool MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
 	bool MakeTexture(const DX12Handle& dx12Handle_);
+
+	void Update(const DemoInputs& inputs_);
+	void Render(const DemoInputs& inputs_);
 };

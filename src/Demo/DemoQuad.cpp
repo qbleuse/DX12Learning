@@ -6,8 +6,13 @@
 #include <d3dcompiler.h>
 #include "DX12Helper.hpp"
 #include "DX12Handle.hpp"
+
+/* math*/
 #include "GPM/Vector3.hpp"
 #include "GPM/Transform.hpp"
+
+/* imgui */
+#include "imgui.h"
 
 #include "Demo/DemoQuad.hpp"
 
@@ -21,6 +26,7 @@ struct DemoQuadConstantBuffer
 {
 	GPM::mat4 perspective;
 	GPM::mat4 view;
+	GPM::mat4 model;
 };
 
 DemoQuad::~DemoQuad()
@@ -47,7 +53,7 @@ DemoQuad::~DemoQuad()
 
 DemoQuad::DemoQuad(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
 {
-	mainCamera.position.z = 0.0f;
+	mainCamera.position.z = 1.0f;
 
 	/* make shader and pipeline */
 	D3D12_SHADER_BYTECODE vertex;
@@ -55,9 +61,11 @@ DemoQuad::DemoQuad(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
 	if (!MakeShader(vertex, pixel) || !MakePipeline(dx12Handle_, vertex, pixel))
 		return;
 
+	/* make resources */
 	if (!MakeGeometry(dx12Handle_) || !MakeTexture(dx12Handle_))
 		return;
 
+	/* making constant buffer */
 	for (int i = 0; i < _descHeaps.size(); i++)
 	{
 		DX12Helper::ConstantResourceUploader cbUploader;
@@ -89,13 +97,15 @@ bool DemoQuad::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& 
 	{
 		float4x4 perspective;
 		float4x4 view;
+		float4x4 model;
 	};	
 
 	VOut vert(float3 position : POSITION, float2 uv : UV)
 	{
 		VOut output;
 	
-		float4 outPos	= mul(float4(position,1.0),view);
+		float4 outPos	= mul(float4(position,1.0),model);
+		outPos			= mul(outPos,view);
 		output.position = mul(outPos,perspective);
 		output.uv		= uv;
 	
@@ -114,7 +124,7 @@ bool DemoQuad::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& 
 	return (DX12Helper::CompileVertex(source, &tmp, vertex) && DX12Helper::CompilePixel(source, &tmp, pixel));
 }
 
-#include "directxmath.h"
+/*===== GEOMETRY =====*/
 
 bool DemoQuad::MakeGeometry(const DX12Handle& dx12Handle_)
 {
@@ -126,10 +136,10 @@ bool DemoQuad::MakeGeometry(const DX12Handle& dx12Handle_)
 	/* create vertex buffer resources */
 	DemoQuadVertex triangle[] =
 	{
-		{{ -0.5f,  0.5f, -0.5f }, {0.0f, 1.0f}}, // top left
-		{{  0.5f, -0.5f, -0.5f }, {1.0f, 0.0f}}, // bottom right
-		{{ -0.5f, -0.5f, -0.5f }, {0.0f, 0.0f}}, // bottom left
-		{{  0.5f,  0.5f, -0.5f }, {1.0f, 1.0f}}  // top right
+		{{ -0.5f,  0.5f, 0.0f }, {0.0f, 1.0f}}, // top left
+		{{  0.5f, -0.5f, 0.0f }, {1.0f, 0.0f}}, // bottom right
+		{{ -0.5f, -0.5f, 0.0f }, {0.0f, 0.0f}}, // bottom left
+		{{  0.5f,  0.5f, 0.0f }, {1.0f, 1.0f}}  // top right
 	};
 
 	int vBufferSize = sizeof(triangle);
@@ -254,6 +264,7 @@ bool DemoQuad::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE
 	sampler.MaxLOD				= D3D12_FLOAT32_MAX;
 	sampler.ShaderVisibility	= D3D12_SHADER_VISIBILITY_PIXEL;
 
+	/* then making the root */
 	D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
 	rootDesc.NumParameters		= _countof(rootParameters);
 	rootDesc.pParameters		= rootParameters;
@@ -336,7 +347,16 @@ bool DemoQuad::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE
 	return true;
 }
 
+
+/*===== REALTIME =====*/
+
 void DemoQuad::UpdateAndRender(const DemoInputs& inputs_)
+{
+	Update(inputs_);
+	Render(inputs_);
+}
+
+void DemoQuad::Update(const DemoInputs& inputs_)
 {
 	mainCamera.UpdateFreeFly(inputs_.cameraInputs);
 
@@ -345,29 +365,46 @@ void DemoQuad::UpdateAndRender(const DemoInputs& inputs_)
 	scissorRect.right	= inputs_.renderContext.width;
 	scissorRect.bottom	= inputs_.renderContext.height;
 
-	DemoQuadConstantBuffer cBuffer;
-	cBuffer.perspective = GPM::Transform::perspective(60.0f * TO_RADIANS, viewport.Width / viewport.Height, 0.001f, 1000.0f);
-	cBuffer.view = mainCamera.GetViewMatrix();
-	DX12Helper::UploadCBuffer((void*)&cBuffer, sizeof(cBuffer), _constantBuffers[inputs_.renderContext.currFrameIndex]);
+	/* update CBuffer */
+	DemoQuadConstantBuffer cBuffer = {};
+	cBuffer.perspective	= GPM::Transform::perspective(60.0f * TO_RADIANS, viewport.Width / viewport.Height, 0.001f, 1000.0f);
+	cBuffer.view		= mainCamera.GetViewMatrix();
 
+
+	static GPM::vec3 scale = { 1.0f,1.0f,1.0f };
+	static float speed = 1.0f;
+	static float rot = 0.0f;
+
+	ImGui::DragFloat3("Scale", (float*)&scale.e, 0.01f, 0.0f, 0.0f, "%.3f",0);
+	ImGui::DragFloat("Speed", &speed);
+
+	rot += sin(speed * inputs_.deltaTime);
+
+	cBuffer.model = GPM::Transform::rotationY(rot) * GPM::Transform::scaling(scale);
+
+	DX12Helper::UploadCBuffer((void*)&cBuffer, sizeof(cBuffer), _constantBuffers[inputs_.renderContext.currFrameIndex]);
+}
+
+void DemoQuad::Render(const DemoInputs& inputs_)
+{
+	ID3D12GraphicsCommandList4* cmdList = inputs_.renderContext.currCmdList;
 	// Clear the render target by using the ClearRenderTargetView command
 	const float clearColor[] = { 0.2f, 0.2f, 0.2f, 1.0f };
-	inputs_.renderContext.currCmdList->ClearRenderTargetView(inputs_.renderContext.currBackBufferHandle, clearColor, 0, nullptr);
-	inputs_.renderContext.currCmdList->ClearDepthStencilView(inputs_.renderContext.depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	cmdList->ClearRenderTargetView(inputs_.renderContext.currBackBufferHandle, clearColor, 0, nullptr);
+	cmdList->ClearDepthStencilView(inputs_.renderContext.depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	// draw triangle
-	inputs_.renderContext.currCmdList->SetGraphicsRootSignature(_rootSignature); // set the root signature
-	inputs_.renderContext.currCmdList->SetPipelineState(_pso);
-	inputs_.renderContext.currCmdList->RSSetViewports(1, &viewport); // set the viewports
-	inputs_.renderContext.currCmdList->RSSetScissorRects(1, &scissorRect); // set the scissor rects
-	inputs_.renderContext.currCmdList->SetGraphicsRootConstantBufferView(0, _constantBuffers[inputs_.renderContext.currFrameIndex].buffer->GetGPUVirtualAddress());
-	inputs_.renderContext.currCmdList->SetDescriptorHeaps(1, &_mainDescriptorHeap); // set the descriptor heap
+	cmdList->SetGraphicsRootSignature(_rootSignature); // set the root signature
+	cmdList->SetPipelineState(_pso);
+	cmdList->RSSetViewports(1, &viewport); // set the viewports
+	cmdList->RSSetScissorRects(1, &scissorRect); // set the scissor rects
+	cmdList->SetGraphicsRootConstantBufferView(0, _constantBuffers[inputs_.renderContext.currFrameIndex].buffer->GetGPUVirtualAddress());
+	cmdList->SetDescriptorHeaps(1, &_mainDescriptorHeap); // set the descriptor heap
 	// set the descriptor table to the descriptor heap (parameter 1, as constant buffer root descriptor is parameter index 0)
-	inputs_.renderContext.currCmdList->SetGraphicsRootDescriptorTable(1, _mainDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	cmdList->SetGraphicsRootDescriptorTable(1, _mainDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-	inputs_.renderContext.currCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // set the primitive topology
-	inputs_.renderContext.currCmdList->IASetVertexBuffers(0, 1, &_vBufferView); // set the vertex buffer (using the vertex buffer view)
-	inputs_.renderContext.currCmdList->IASetIndexBuffer(&_iBufferView); // set the index buffer (using the index buffer view)
+	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // set the primitive topology
+	cmdList->IASetVertexBuffers(0, 1, &_vBufferView); // set the vertex buffer (using the vertex buffer view)
+	cmdList->IASetIndexBuffer(&_iBufferView); // set the index buffer (using the index buffer view)
 
-	inputs_.renderContext.currCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0); // finally draw 6 indices (draw the quad)
+	cmdList->DrawIndexedInstanced(6, 1, 0, 0, 0); // finally draw 6 indices (draw the quad)
 }

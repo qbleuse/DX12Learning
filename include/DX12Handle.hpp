@@ -13,6 +13,7 @@ struct DX12Contextual
 	ID3D12GraphicsCommandList4* currCmdList				= nullptr;
 	D3D12_CPU_DESCRIPTOR_HANDLE currBackBufferHandle;
 	D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle;
+	ID3D12Resource*				currBackBuffer			= nullptr;
 	UINT						currFrameIndex			= 0;
 	FLOAT						width					= 0;
 	FLOAT						height					= 0;
