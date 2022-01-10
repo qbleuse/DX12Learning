@@ -100,7 +100,7 @@ void ImGuiHandle::ChooseDemo(const std::vector<std::unique_ptr<Demo>>& demos_, i
 {
     {
         if (ImGui::Button("<"))
-            demoId_ = (demoId_ - 1) % (int)demos_.size();
+            demoId_ = (demoId_ - 1) > 0 ? (demoId_ - 1) % (int)demos_.size() : (int)demos_.size() - 1;
         ImGui::SameLine();
         ImGui::Text("%d/%d", demoId_ + 1, (int)demos_.size());
         ImGui::SameLine();

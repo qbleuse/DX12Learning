@@ -96,7 +96,7 @@ int main()
 	std::vector<std::unique_ptr<Demo>> demos;
 	demos.push_back(std::make_unique<DemoTriangle>(demoInputs,dx12handle));
 	demos.push_back(std::make_unique<DemoQuad>(demoInputs, dx12handle));
-	demos.push_back(std::make_unique<DemoRayCPU>(demoInputs));
+	demos.push_back(std::make_unique<DemoRayCPU>(demoInputs, dx12handle));
 
 	/* Loop Var */
 	bool		mouseCaptured = false;
