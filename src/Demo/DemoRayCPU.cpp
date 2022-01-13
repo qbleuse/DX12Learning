@@ -28,8 +28,10 @@ DemoRayCPU::~DemoRayCPU()
 
 DemoRayCPU::UploadTexture::~UploadTexture()
 {
-	if (gpuTexture)
-		gpuTexture->Release();
+	if (defaultTexture)
+		defaultTexture->Release();
+	if (uploadTexture)
+		uploadTexture->Release();
 }
 
 DemoRayCPU::DemoRayCPU(const DemoInputs& inputs, const DX12Handle& dx12Handle_)
@@ -38,7 +40,7 @@ DemoRayCPU::DemoRayCPU(const DemoInputs& inputs, const DX12Handle& dx12Handle_)
 
 	D3D12_SHADER_BYTECODE vertex;
 	D3D12_SHADER_BYTECODE pixel;
-    mainCamera.position = { 0.f, 0.f, 2.f };
+	mainCamera.position = { 0.f, 0.f, 2.f };
 	if (!MakeTexture(inputs, dx12Handle_) 
 		|| !MakeShader(vertex,pixel) 
 		|| !MakePipeline(dx12Handle_,vertex,pixel))
@@ -50,32 +52,32 @@ bool DemoRayCPU::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE
 {
 	ID3DBlob* tmp;
 	std::string source = (const char*)R"(#line 30
-    struct VOut
-    {
-        float4 position : SV_POSITION;
-        float2 uv : UV; 
-    };
-    
-    VOut vert(uint vI :SV_VertexId )
-    {
-        VOut output;
-    
-        float2 uv = float2((vI << 1) & 2, vI & 2);
-        output.uv = float2(uv.x,uv.y);
-        output.position = float4(uv.x * 2 - 1, -uv.y * 2 + 1, 0, 1);
-    
-        return output;
+	struct VOut
+	{
+		float4 position : SV_POSITION;
+		float2 uv : UV; 
+	};
+	
+	VOut vert(uint vI :SV_VertexId )
+	{
+		VOut output;
+	
+		float2 uv = float2((vI << 1) & 2, vI & 2);
+		output.uv = float2(uv.x,uv.y);
+		output.position = float4(uv.x * 2 - 1, -uv.y * 2 + 1, 0, 1);
+	
+		return output;
 
-    }
+	}
 
-	Buffer tex : register(t0);
+	Texture2D tex : register(t0);
 	SamplerState  clamp : register(s0);
 
 	float4 frag(float4 position : SV_POSITION, float2 uv : UV) : SV_TARGET
 	{
-		return tex.Load(uv.x * 1900.0f  + uv.y * 800.0f);
+		return tex.Sample(clamp,uv);
 	}
-    )";
+	)";
 
 	return (DX12Helper::CompileVertex(source, &tmp, vertex) && DX12Helper::CompilePixel(source, &tmp, pixel));
 }
@@ -182,19 +184,8 @@ bool DemoRayCPU::MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Han
 	/* create the descriptor heap that will store our srv */
 	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
 	heapDesc.NumDescriptors = 1;
-	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-
-	for (int i = 0; i < _descHeaps.size(); i++)
-	{
-		hr = dx12Handle_._device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_descHeaps[i]));
-	}
-
-	if (FAILED(hr))
-	{
-		printf("Failing creating main descriptor heap for %s: %s\n", Name(), std::system_category().message(hr).c_str());
-		return false;
-	}
+	heapDesc.Flags	= D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	heapDesc.Type	= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	/* describe the texture */
 	D3D12_RESOURCE_DESC texDesc = {};
@@ -215,7 +206,7 @@ bool DemoRayCPU::MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Han
 
 	/* create upload heap to send texture info to default */
 	D3D12_HEAP_PROPERTIES heapProp = {};
-	heapProp.Type = D3D12_HEAP_TYPE_READBACK;
+
 
 	D3D12_RESOURCE_DESC uploadDesc = {};
 
@@ -231,12 +222,22 @@ bool DemoRayCPU::MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Han
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping			= D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.Format							= texDesc.Format;
-	srvDesc.ViewDimension					= D3D12_SRV_DIMENSION_BUFFER;
-	srvDesc.Buffer.NumElements				= 1;
+	srvDesc.ViewDimension					= D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels				= 1;
 
 	for (int i = 0; i < gpuTextures.size(); i++)
 	{
-		hr = dx12Handle_._device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&gpuTextures[i].gpuTexture));
+		hr = dx12Handle_._device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_descHeaps[i]));
+
+		if (FAILED(hr))
+		{
+			printf("Failing creating main descriptor heap for %s: %s\n", Name(), std::system_category().message(hr).c_str());
+			return false;
+		}
+
+		heapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+		hr = dx12Handle_._device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&gpuTextures[i].uploadTexture));
 
 		if (FAILED(hr))
 		{
@@ -244,19 +245,34 @@ bool DemoRayCPU::MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Han
 			return false;
 		}
 
-		dx12Handle_._device->CreateShaderResourceView(gpuTextures[i].gpuTexture, &srvDesc, _descHeaps[i]->GetCPUDescriptorHandleForHeapStart());
+		//gpuTextures[i].uploadTexture->Map(0, nullptr, &gpuTextures[i].mapHandle);
 
-		gpuTextures[i].gpuTexture->Map(0, nullptr, &gpuTextures[i].mapHandle);
+		heapProp.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+		hr = dx12Handle_._device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&gpuTextures[i].defaultTexture));
+
+		if (FAILED(hr))
+		{
+			printf("Failing creating default buffer upload heap: %s\n", std::system_category().message(hr).c_str());
+			return false;
+		}
+
+		dx12Handle_._device->CreateShaderResourceView(gpuTextures[i].defaultTexture, &srvDesc, _descHeaps[i]->GetCPUDescriptorHandleForHeapStart());
 	}
 
-	textureBufferSize = texDesc.Width * texDesc.Height * sizeof(GPM::vec4);
-	cpuTexture = (GPM::vec4*)malloc(texDesc.Width * texDesc.Height * sizeof(GPM::vec4));
+	data.RowPitch	= texDesc.Width * sizeof(GPM::vec4);
+	data.SlicePitch = data.RowPitch * texDesc.Height;
+	cpuTexture		= (GPM::vec4*)malloc(data.SlicePitch);
+	data.pData		= cpuTexture;
+	width			= texDesc.Width;
+	height			= texDesc.Height;
 
 	return true;
 }
 
 /*===== RUNTIME =====*/
 
+/* for now it is extremly inefficient, will be optimised later */
 void DemoRayCPU::UpdateAndRender(const DemoInputs& inputs_)
 {
 
@@ -265,25 +281,47 @@ void DemoRayCPU::UpdateAndRender(const DemoInputs& inputs_)
 	scissorRect.right	= inputs_.renderContext.width;
 	scissorRect.bottom	= inputs_.renderContext.height;
 
-    // Clear the render target by using the ClearRenderTargetView command
-    const float clearColor[] = { 1.0f, 0.2f, 0.4f, 1.0f };
-    //inputs.renderContext.currCmdList->ClearRenderTargetView(inputs.renderContext.currBackBufferHandle, clearColor, 0, nullptr);
+	/* Clear the render target by hand */
+	const float clearColor[] = { 1.0f, 0.2f, 0.4f, 1.0f };
 
 	for (int i = 0; i < height; i++)
 	{
 		for (int j = 0; j < width; j++)
 		{
-			cpuTexture[i * width + j] = GPM::Vec4(clearColor);
+			/* some gradient */
+			GPM::Vec4 color = GPM::Vec4(clearColor);
+			color.y = (float)i / (float)height;
+			cpuTexture[i * width + j] = color;
 		}
 	}
 
-	///* uploading and barrier for making the application wait for the ressource to be uploaded on gpu */
-	memcpy(gpuTextures[inputs_.renderContext.currFrameIndex].mapHandle, cpuTexture, textureBufferSize);
-
+	/* getting the tools */
 	ID3D12GraphicsCommandList4* cmdList = inputs_.renderContext.currCmdList;
-	//cmdList->ClearRenderTargetView(inputs_.renderContext.currBackBufferHandle, clearColor, 0, nullptr);
+	UploadTexture& uploadTex = gpuTextures[inputs_.renderContext.currFrameIndex];
 
+	/* set resource to write */
+	D3D12_RESOURCE_BARRIER barrier	= {};
+	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource	= uploadTex.defaultTexture;
+	barrier.Transition.StateBefore	= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_COPY_DEST;
+	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
+	cmdList->ResourceBarrier(1, &barrier);
+
+	/* upload resource */
+	UpdateSubresources(cmdList, uploadTex.defaultTexture, uploadTex.uploadTexture, 0, 0, 1, &data);
+
+	/* set resource for read */
+	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource	= uploadTex.defaultTexture;
+	barrier.Transition.StateBefore	= D3D12_RESOURCE_STATE_COPY_DEST;
+	barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	cmdList->ResourceBarrier(1, &barrier);
+
+	/* set pipeline for full screen quad and render */
 	cmdList->SetGraphicsRootSignature(_rootSignature); // set the root signature
 	cmdList->SetPipelineState(_pso);
 	cmdList->RSSetViewports(1, &viewport); // set the viewports
@@ -295,5 +333,5 @@ void DemoRayCPU::UpdateAndRender(const DemoInputs& inputs_)
 
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // set the primitive topology
 
-	cmdList->DrawInstanced(3, 1, 0, 0); // finally draw 6 indices (draw the quad)
+	cmdList->DrawInstanced(3, 1, 0, 0); // finally draw 3 indices (draw the quad)
 }

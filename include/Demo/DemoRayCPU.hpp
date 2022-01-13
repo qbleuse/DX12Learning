@@ -34,7 +34,8 @@ class DemoRayCPU final : public Demo
     struct UploadTexture
     {
         /* GPU Texture */
-        ID3D12Resource* gpuTexture  = nullptr;
+        ID3D12Resource* uploadTexture  = nullptr;
+        ID3D12Resource* defaultTexture = nullptr;
         void*           mapHandle   = nullptr;
 
         ~UploadTexture();
@@ -44,8 +45,8 @@ class DemoRayCPU final : public Demo
     std::array<UploadTexture, FRAME_BUFFER_COUNT> gpuTextures;
 
     /* CPU Texture */
-    GPM::vec4* cpuTexture = nullptr;
-    size_t textureBufferSize = 0;
-    int width = 0;
-    int height = 0;
+    GPM::vec4*              cpuTexture  = nullptr;
+    D3D12_SUBRESOURCE_DATA  data        = {};
+    UINT                    width       = 0;
+    UINT                    height      = 0;
 };
