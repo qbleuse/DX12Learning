@@ -291,31 +291,37 @@ static constexpr float degToRad = PI / 180.f;
 static inline GPM::Line ProcessRay(const GPM::Vec2& uv, const DemoRayCPUSphere::Uniform& uniform)
 {
 	const GPM::Vec3 dir = uniform.leftLowerNearPlanePoint + uniform.camRight * uniform.nearPlaneLeftHalfSize * 2.f * uv.x + uniform.camUp * uniform.nearPlaneUpHalfSize * 2.f * uv.y;
-	return GPM::Line(uniform.camPos, dir.normalized());
+
+	// Don't normalize direction. Only do it if neccessary
+	return GPM::Line(uniform.camPos, dir);
 }
 
 // Looking for collision between ray and sphere
-static inline bool isRayeCollideWithSphere(const GPM::Line& ray, const GPM::Vec3& center, float radius)
+static inline bool isRayCollideWithSphere(const GPM::Line& ray, const GPM::Vec3& center, float radius, GPM::Vec3& outNormal)
 {
-	GPM::Vec3 oc = ray.getOrigin() - center;
-	float a = GPM::Vec3::dot(ray.getNormal(), ray.getNormal());
-	float b = 2.0f * GPM::Vec3::dot(oc, ray.getNormal());
-	float c = GPM::Vec3::dot(oc, oc) - radius * radius;
-	float disciminant = b * b - 4.f * a * c;
-	return disciminant > 0.f;
+	const GPM::Vec3 oc = ray.getOrigin() - center;
+	const float a = GPM::Vec3::dot(ray.getNormal(), ray.getNormal());
+	const float b = 2.0f * GPM::Vec3::dot(oc, ray.getNormal());
+	const float c = GPM::Vec3::dot(oc, oc) - radius * radius;
+	const float disciminant = b * b - 4.f * a * c;
+	if (disciminant < 0.f)
+	{
+		return false;
+	}
+	else
+	{
+		const float t = (-b - std::sqrt(disciminant)) / (2.0f * a);
+		outNormal = ((ray.getOrigin() + ray.getNormal() * t) - center) / radius;
+		return true;
+	}
 }
-
-static inline GPM::Vec3 color(const GPM::Line& ray)
-{
-	float t = 0.5f * (ray.getNormal().y + 1.0f);
-	return (1.0f - t) * GPM::Vec3::one() + t * GPM::Vec3(0.5, 0.7, 1.0);
-}
-
 
 static inline GPM::Vec4 ProcessCPUFragmentShader(const GPM::Vec2& uv, const DemoRayCPUSphere::Uniform& uniform)
 {
 	const GPM::Line ray = ProcessRay(uv, uniform);
-	return Gradiant(uv, uniform) * isRayeCollideWithSphere(ray, uniform.sphereCenter, uniform.sphereRadius);
+	GPM::Vec3 normal = GPM::Vec3::zero();
+	isRayCollideWithSphere(ray, uniform.sphereCenter, uniform.sphereRadius, normal);
+	return GPM::Vec4(normal, 1.0f);
 }
 
 
@@ -332,7 +338,7 @@ void DemoRayCPUSphere::UpdateInspector()
 		if (ImGui::DragFloat3("Rotation", (float*)&eulerCamRot.e, 0.1f))
 		{
 			GPM::Transform modelMatrix = GPM::Transform::rotation(eulerCamRot * degToRad);
-			uniform.camForward = modelMatrix.forward();
+			uniform.camForward = modelMatrix.backward();
 			uniform.camRight = modelMatrix.right();
 			uniform.camUp = modelMatrix.up();
 		}
