@@ -62,6 +62,7 @@ class DX12Handle
 		bool EndDrawing();
 		bool Render();
 		bool ResizeBuffer(unsigned int windowWidth, unsigned int windowHeight);
+		void YieldGPU();
 
 	private:
 		UINT _currFrameIndex = 0;
