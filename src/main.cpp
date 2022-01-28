@@ -171,7 +171,7 @@ int main()
 		
 	}
 
-
+	dx12handle.YieldGPU();
 	demos.clear();
 	imGuiHandle.Terminate();
 

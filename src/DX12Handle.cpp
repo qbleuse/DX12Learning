@@ -31,16 +31,7 @@ DX12Handle::~DX12Handle()
 
 	int bufferCount = _backbuffers.size();
 
-	for (int i = 0; i < bufferCount; i++)
-	{
-		uint64_t fenceValueForSignal = ++_fenceValue[i];
-		_queue->Signal(_fences[i], fenceValueForSignal);
-		if (_fences[i]->GetCompletedValue() < _fenceValue[i])
-		{
-			_fences[i]->SetEventOnCompletion(fenceValueForSignal, _fenceEvent);
-			WaitForSingleObject(_fenceEvent, INFINITE);
-		}
-	}
+	YieldGPU();
 
 	for (int i = 0; i < _backbuffers.size(); i++)
 	{
@@ -515,4 +506,20 @@ bool DX12Handle::Render()
 	_swapchain->Present(0, 0);
 
 	return true;
+}
+
+void DX12Handle::YieldGPU()
+{
+	int bufferCount = _backbuffers.size();
+
+	for (int i = 0; i < bufferCount; i++)
+	{
+		uint64_t fenceValueForSignal = ++_fenceValue[i];
+		_queue->Signal(_fences[i], fenceValueForSignal);
+		if (_fences[i]->GetCompletedValue() < _fenceValue[i])
+		{
+			_fences[i]->SetEventOnCompletion(fenceValueForSignal, _fenceEvent);
+			WaitForSingleObject(_fenceEvent, INFINITE);
+		}
+	}
 }
