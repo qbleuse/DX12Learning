@@ -38,7 +38,23 @@ class DemoRayCPUSphere final : public Demo
     struct Uniform
     {
         GPM::Vec4 cleanColor{ 1.0f, 0.2f, 0.4f, 1.0f };
+        GPM::Vec3 camForward = GPM::Vec3::forward();
+        GPM::Vec3 camRight = GPM::Vec3::right();
+        GPM::Vec3 camUp = GPM::Vec3::up();
+        GPM::Vec3 camPos = GPM::Vec3::zero();
+        float camAspect = 1.f;
+        float camFOV = 75.f;
+        float camNear = 0.1f;
+        
+        float nearPlaneLeftHalfSize;
+        float nearPlaneUpHalfSize;
+        GPM::Vec3 leftLowerNearPlanePoint;
+
+        GPM::Vec3 sphereCenter = GPM::Vec3::forward() * 30.f;
+        float sphereRadius = 1.f;
     } uniform;
+
+    GPM::Vec3 eulerCamRot = GPM::Vec3::zero();
 
     struct UploadTexture
     {

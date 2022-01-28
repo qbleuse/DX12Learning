@@ -9,6 +9,8 @@
 /* imgui */
 #include "imgui.h"
 
+#include "GPM//Transform.hpp"
+#include "GPM/Shape3D/Line.hpp"
 #include "Demo/DemoRayCPUSphere.hpp"
 
 
@@ -49,6 +51,7 @@ DemoRayCPUSphere::DemoRayCPUSphere(const DemoInputs& inputs, const DX12Handle& d
 		|| !MakePipeline(dx12Handle_,vertex,pixel))
 		return;
 
+	uniform.camAspect = inputs.renderContext.width / inputs.renderContext.height;
 }
 
 bool DemoRayCPUSphere::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
@@ -274,7 +277,7 @@ bool DemoRayCPUSphere::MakeTexture(const DemoInputs& inputs, const DX12Handle& d
 }
 
 /*===== CPU shader =====*/
-static inline GPM::Vec4 ProcessCPUFragmentShaderGradiant(const GPM::Vec2& uv, const DemoRayCPUSphere::Uniform& uniform)
+static inline GPM::Vec4 Gradiant(const GPM::Vec2& uv, const DemoRayCPUSphere::Uniform& uniform)
 {
 	/* some gradient */
 	GPM::Vec4 color = uniform.cleanColor;
@@ -282,9 +285,37 @@ static inline GPM::Vec4 ProcessCPUFragmentShaderGradiant(const GPM::Vec2& uv, co
 	return color;
 }
 
+static constexpr float degToRad = PI / 180.f;
+
+// Compute the ray from the camera to the near plane camera corresponding to the current uv
+static inline GPM::Line ProcessRay(const GPM::Vec2& uv, const DemoRayCPUSphere::Uniform& uniform)
+{
+	const GPM::Vec3 dir = uniform.leftLowerNearPlanePoint + uniform.camRight * uniform.nearPlaneLeftHalfSize * 2.f * uv.x + uniform.camUp * uniform.nearPlaneUpHalfSize * 2.f * uv.y;
+	return GPM::Line(uniform.camPos, dir.normalized());
+}
+
+// Looking for collision between ray and sphere
+static inline bool isRayeCollideWithSphere(const GPM::Line& ray, const GPM::Vec3& center, float radius)
+{
+	GPM::Vec3 oc = ray.getOrigin() - center;
+	float a = GPM::Vec3::dot(ray.getNormal(), ray.getNormal());
+	float b = 2.0f * GPM::Vec3::dot(oc, ray.getNormal());
+	float c = GPM::Vec3::dot(oc, oc) - radius * radius;
+	float disciminant = b * b - 4.f * a * c;
+	return disciminant > 0.f;
+}
+
+static inline GPM::Vec3 color(const GPM::Line& ray)
+{
+	float t = 0.5f * (ray.getNormal().y + 1.0f);
+	return (1.0f - t) * GPM::Vec3::one() + t * GPM::Vec3(0.5, 0.7, 1.0);
+}
+
+
 static inline GPM::Vec4 ProcessCPUFragmentShader(const GPM::Vec2& uv, const DemoRayCPUSphere::Uniform& uniform)
 {
-	return ProcessCPUFragmentShaderGradiant(uv, uniform);
+	const GPM::Line ray = ProcessRay(uv, uniform);
+	return Gradiant(uv, uniform) * isRayeCollideWithSphere(ray, uniform.sphereCenter, uniform.sphereRadius);
 }
 
 
@@ -293,7 +324,37 @@ static inline GPM::Vec4 ProcessCPUFragmentShader(const GPM::Vec2& uv, const Demo
 
 void DemoRayCPUSphere::UpdateInspector()
 {
-	ImGui::ColorEdit4("Clean color", (float*)&uniform.cleanColor.e);
+	if (ImGui::CollapsingHeader("Camera settings"))
+	{
+		ImGui::PushID("Camera settings");
+
+		ImGui::DragFloat3("Position", (float*)&uniform.camPos.e, 0.1f);
+		if (ImGui::DragFloat3("Rotation", (float*)&eulerCamRot.e, 0.1f))
+		{
+			GPM::Transform modelMatrix = GPM::Transform::rotation(eulerCamRot * degToRad);
+			uniform.camForward = modelMatrix.forward();
+			uniform.camRight = modelMatrix.right();
+			uniform.camUp = modelMatrix.up();
+		}
+
+		ImGui::Spacing();
+		ImGui::ColorEdit4("Clean color", (float*)&uniform.cleanColor.e);
+		ImGui::DragFloat("Near", (float*)&uniform.camNear, 0.1f);
+		ImGui::DragFloat("Fov", (float*)&uniform.camFOV, 0.1f);
+		ImGui::DragFloat("Aspect", (float*)&uniform.camAspect, 0.1f);
+
+		ImGui::PopID();
+	}
+	
+	if (ImGui::CollapsingHeader("Sphere settings"))
+	{
+		ImGui::PushID("Sphere settings");
+
+		ImGui::DragFloat3("Position", (float*)&uniform.sphereCenter.e, 0.1f);
+		ImGui::DragFloat("Radius", (float*)&uniform.sphereRadius, 0.1f);
+
+		ImGui::PopID();
+	}
 }
 
 void DemoRayCPUSphere::UpdateAndRender(const DemoInputs& inputs_)
@@ -318,6 +379,11 @@ void DemoRayCPUSphere::Render(const DemoInputs& inputs_)
 	const float clearColor[] = { 1.0f, 0.2f, 0.4f, 1.0f };
 
 	GPM::Vec2 uv;
+
+	uniform.nearPlaneLeftHalfSize = std::tan(uniform.camFOV * degToRad * 0.5f) * uniform.camNear;
+	uniform.nearPlaneUpHalfSize = uniform.nearPlaneLeftHalfSize / uniform.camAspect;
+	uniform.leftLowerNearPlanePoint = -uniform.camRight * uniform.nearPlaneLeftHalfSize - uniform.camUp * uniform.nearPlaneUpHalfSize + uniform.camForward;
+
 	for (int i = 0; i < height; i++)
 	{
 		uv.y = (float)i / (float)height;

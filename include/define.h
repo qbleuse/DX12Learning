@@ -4,3 +4,6 @@
 
 #define WINDOW_WIDTH 1800
 #define WINDOW_HEIGHT 900
+
+#undef near
+#undef far
