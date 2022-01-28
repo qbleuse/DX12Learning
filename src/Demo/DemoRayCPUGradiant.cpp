@@ -6,6 +6,9 @@
 #include "DX12Handle.hpp"
 #include "DX12Helper.hpp"
 
+/* imgui */
+#include "imgui.h"
+
 #include "Demo/DemoRayCPUGradiant.hpp"
 
 
@@ -270,23 +273,46 @@ bool DemoRayCPUGradiant::MakeTexture(const DemoInputs& inputs, const DX12Handle&
 	return true;
 }
 
-/*===== RUNTIME =====*/
-GPM::vec4 ProcessCPUFragmentShader(const GPM::Vec2& uv)
+/*===== CPU shader =====*/
+static inline GPM::Vec4 ProcessCPUFragmentShaderGradiant(const GPM::Vec2& uv, const DemoRayCPUGradiant::Uniform& uniform)
 {
 	/* some gradient */
-	GPM::Vec4 color(1.0f, 0.2f, 0.4f, 1.0f);
+	GPM::Vec4 color = uniform.cleanColor;
 	color.y = uv.y;
 	return color;
 }
 
+static inline GPM::Vec4 ProcessCPUFragmentShader(const GPM::Vec2& uv, const DemoRayCPUGradiant::Uniform& uniform)
+{
+	return ProcessCPUFragmentShaderGradiant(uv, uniform);
+}
+
+
+/*===== RUNTIME =====*/
 /* for now it is extremly inefficient, will be optimised later */
+
+void DemoRayCPUGradiant::UpdateInspector()
+{
+	ImGui::ColorEdit4("Clean color", (float*)&uniform.cleanColor.e);
+}
+
 void DemoRayCPUGradiant::UpdateAndRender(const DemoInputs& inputs_)
 {
+	Update(inputs_);
+	Render(inputs_);
+}
 
-	viewport.Width		= inputs_.renderContext.width;
-	viewport.Height		= inputs_.renderContext.height;
-	scissorRect.right	= inputs_.renderContext.width;
-	scissorRect.bottom	= inputs_.renderContext.height;
+void DemoRayCPUGradiant::Update(const DemoInputs& inputs_)
+{
+	UpdateInspector();
+}
+
+void DemoRayCPUGradiant::Render(const DemoInputs& inputs_)
+{
+	viewport.Width = inputs_.renderContext.width;
+	viewport.Height = inputs_.renderContext.height;
+	scissorRect.right = inputs_.renderContext.width;
+	scissorRect.bottom = inputs_.renderContext.height;
 
 	/* Clear the render target by hand */
 	const float clearColor[] = { 1.0f, 0.2f, 0.4f, 1.0f };
@@ -298,7 +324,7 @@ void DemoRayCPUGradiant::UpdateAndRender(const DemoInputs& inputs_)
 		for (int j = 0; j < width; j++)
 		{
 			uv.x = (float)j / (float)width;
-			cpuTexture[i * width + j] = ProcessCPUFragmentShader(uv);
+			cpuTexture[i * width + j] = ProcessCPUFragmentShader(uv, uniform);
 		}
 	}
 
@@ -307,12 +333,12 @@ void DemoRayCPUGradiant::UpdateAndRender(const DemoInputs& inputs_)
 	UploadTexture& uploadTex = gpuTextures[inputs_.renderContext.currFrameIndex];
 
 	/* set resource to write */
-	D3D12_RESOURCE_BARRIER barrier	= {};
-	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Transition.pResource	= uploadTex.defaultTexture;
-	barrier.Transition.StateBefore	= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-	barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_COPY_DEST;
-	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = uploadTex.defaultTexture;
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
 	cmdList->ResourceBarrier(1, &barrier);
 
@@ -320,11 +346,11 @@ void DemoRayCPUGradiant::UpdateAndRender(const DemoInputs& inputs_)
 	UpdateSubresources(cmdList, uploadTex.defaultTexture, uploadTex.uploadTexture, 0, 0, 1, &data);
 
 	/* set resource for read */
-	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Transition.pResource	= uploadTex.defaultTexture;
-	barrier.Transition.StateBefore	= D3D12_RESOURCE_STATE_COPY_DEST;
-	barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = uploadTex.defaultTexture;
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
 	cmdList->ResourceBarrier(1, &barrier);
 

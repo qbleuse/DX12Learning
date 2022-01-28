@@ -31,6 +31,15 @@ class DemoRayCPUGradiant final : public Demo
     bool MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Handle_);
     bool MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel);
 
+    void UpdateInspector();
+    void Update(const DemoInputs& inputs_);
+    void Render(const DemoInputs& inputs_);
+
+    struct Uniform
+    {
+        GPM::Vec4 cleanColor { 1.0f, 0.2f, 0.4f, 1.0f };
+    } uniform;
+
     struct UploadTexture
     {
         /* GPU Texture */
