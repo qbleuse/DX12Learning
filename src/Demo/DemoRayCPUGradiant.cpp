@@ -6,10 +6,10 @@
 #include "DX12Handle.hpp"
 #include "DX12Helper.hpp"
 
-#include "Demo/DemoRayCPU.hpp"
+#include "Demo/DemoRayCPUGradiant.hpp"
 
 
-DemoRayCPU::~DemoRayCPU()
+DemoRayCPUGradiant::~DemoRayCPUGradiant()
 {
 	free(cpuTexture);
 
@@ -26,7 +26,7 @@ DemoRayCPU::~DemoRayCPU()
 }
 
 
-DemoRayCPU::UploadTexture::~UploadTexture()
+DemoRayCPUGradiant::UploadTexture::~UploadTexture()
 {
 	if (defaultTexture)
 		defaultTexture->Release();
@@ -34,7 +34,7 @@ DemoRayCPU::UploadTexture::~UploadTexture()
 		uploadTexture->Release();
 }
 
-DemoRayCPU::DemoRayCPU(const DemoInputs& inputs, const DX12Handle& dx12Handle_)
+DemoRayCPUGradiant::DemoRayCPUGradiant(const DemoInputs& inputs, const DX12Handle& dx12Handle_)
 {
 	viewport.MaxDepth = 1.0f;
 
@@ -48,7 +48,7 @@ DemoRayCPU::DemoRayCPU(const DemoInputs& inputs, const DX12Handle& dx12Handle_)
 
 }
 
-bool DemoRayCPU::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
+bool DemoRayCPUGradiant::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
 {
 	ID3DBlob* tmp;
 	std::string source = (const char*)R"(#line 30
@@ -82,7 +82,7 @@ bool DemoRayCPU::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE
 	return (DX12Helper::CompileVertex(source, &tmp, vertex) && DX12Helper::CompilePixel(source, &tmp, pixel));
 }
 
-bool DemoRayCPU::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
+bool DemoRayCPUGradiant::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
 {
 	HRESULT hr;
 	ID3DBlob* error;
@@ -177,7 +177,7 @@ bool DemoRayCPU::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECO
 	return true;
 }
 
-bool DemoRayCPU::MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Handle_)
+bool DemoRayCPUGradiant::MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Handle_)
 {
 	HRESULT hr;
 
@@ -271,9 +271,16 @@ bool DemoRayCPU::MakeTexture(const DemoInputs& inputs, const DX12Handle& dx12Han
 }
 
 /*===== RUNTIME =====*/
+GPM::vec4 ProcessCPUFragmentShader(const GPM::Vec2& uv)
+{
+	/* some gradient */
+	GPM::Vec4 color(1.0f, 0.2f, 0.4f, 1.0f);
+	color.y = uv.y;
+	return color;
+}
 
 /* for now it is extremly inefficient, will be optimised later */
-void DemoRayCPU::UpdateAndRender(const DemoInputs& inputs_)
+void DemoRayCPUGradiant::UpdateAndRender(const DemoInputs& inputs_)
 {
 
 	viewport.Width		= inputs_.renderContext.width;
@@ -284,14 +291,14 @@ void DemoRayCPU::UpdateAndRender(const DemoInputs& inputs_)
 	/* Clear the render target by hand */
 	const float clearColor[] = { 1.0f, 0.2f, 0.4f, 1.0f };
 
+	GPM::Vec2 uv;
 	for (int i = 0; i < height; i++)
 	{
+		uv.y = (float)i / (float)height;
 		for (int j = 0; j < width; j++)
 		{
-			/* some gradient */
-			GPM::Vec4 color = GPM::Vec4(clearColor);
-			color.y = (float)i / (float)height;
-			cpuTexture[i * width + j] = color;
+			uv.x = (float)j / (float)width;
+			cpuTexture[i * width + j] = ProcessCPUFragmentShader(uv);
 		}
 	}
 

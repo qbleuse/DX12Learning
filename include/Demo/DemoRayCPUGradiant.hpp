@@ -7,15 +7,15 @@
 struct ID3D12Resource;
 class DX12Handle;
 
-class DemoRayCPU final : public Demo
+class DemoRayCPUGradiant final : public Demo
 {
     protected:
         Camera mainCamera = {};
 
 	public:
 
-    ~DemoRayCPU() final;
-    DemoRayCPU(const DemoInputs& inputs, const DX12Handle& dx12Handle_);
+    ~DemoRayCPUGradiant() final;
+    DemoRayCPUGradiant(const DemoInputs& inputs, const DX12Handle& dx12Handle_);
 
     void UpdateAndRender(const DemoInputs& inputs) final;
 

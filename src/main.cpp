@@ -18,7 +18,8 @@
 /* Demo */
 #include "Demo.hpp"
 #include "Demo/DemoTriangle.hpp"
-#include "Demo/DemoRayCPU.hpp"
+#include "Demo/DemoRayCPUGradiant.hpp"
+#include "Demo/DemoRayCPUSphere.hpp"
 #include "Demo/DemoQuad.hpp"
 
 static void glfw_error_callback(int error, const char* description)
@@ -96,7 +97,8 @@ int main()
 	std::vector<std::unique_ptr<Demo>> demos;
 	demos.push_back(std::make_unique<DemoTriangle>(demoInputs,dx12handle));
 	demos.push_back(std::make_unique<DemoQuad>(demoInputs, dx12handle));
-	demos.push_back(std::make_unique<DemoRayCPU>(demoInputs, dx12handle));
+	demos.push_back(std::make_unique<DemoRayCPUGradiant>(demoInputs, dx12handle));
+	demos.push_back(std::make_unique<DemoRayCPUSphere>(demoInputs, dx12handle));
 
 	/* Loop Var */
 	bool		mouseCaptured = false;
