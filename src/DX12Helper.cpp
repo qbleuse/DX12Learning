@@ -14,8 +14,10 @@
 #include "DX12Helper.hpp"
 
 /* texture loading */
+#define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "tiny_loader/tiny_gltf.h"
 
 #undef max
 

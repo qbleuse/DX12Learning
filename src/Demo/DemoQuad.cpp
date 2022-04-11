@@ -145,9 +145,9 @@ bool DemoQuad::MakeGeometry(const DX12Handle& dx12Handle_)
 	int vBufferSize = sizeof(triangle);
 
 	D3D12_SUBRESOURCE_DATA vertexData = {};
-	vertexData.pData = (BYTE*)(triangle); // pointer to our vertex array
-	vertexData.RowPitch = vBufferSize; // size of all our triangle vertex data
-	vertexData.SlicePitch = vBufferSize; // also the size of our triangle vertex data
+	vertexData.pData		= (BYTE*)(triangle); // pointer to our vertex array
+	vertexData.RowPitch		= vBufferSize; // size of all our triangle vertex data
+	vertexData.SlicePitch	= vBufferSize; // also the size of our triangle vertex data
 
 	/* create resource helper and call for vertex buffer uploaded on GPU*/
 	DX12Helper::DefaultResource vertexHelper;

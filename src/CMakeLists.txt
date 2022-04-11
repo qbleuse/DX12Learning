@@ -11,7 +11,8 @@ set (SRC_FILES
     "${DEMO_SRC_DIR}/DemoRayCPUGradiant.cpp"
     "${DEMO_SRC_DIR}/DemoRayCPUSphere.cpp"
     "${DEMO_SRC_DIR}/DemoTriangle.cpp"
-    "${DEMO_SRC_DIR}/DemoQuad.cpp")
+    "${DEMO_SRC_DIR}/DemoQuad.cpp"
+	"${DEMO_SRC_DIR}/DemoModel.cpp")
 
 
 target_sources(DX12Learning PUBLIC ${SRC_FILES})
