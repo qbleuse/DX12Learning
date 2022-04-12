@@ -12,6 +12,13 @@
 
 class DX12Handle;
 
+namespace tinygltf
+{
+	class Model;
+}
+
+#include "GPM/Transform.hpp"
+
 namespace DX12Helper
 {
 	/* Shader */
@@ -83,4 +90,41 @@ namespace DX12Helper
 	void LoadTexture(const std::string& filePath_, D3D12_SUBRESOURCE_DATA& texData, D3D12_RESOURCE_DESC& texDesc_);
 	bool CreateTexture(const std::string& filePath_, TextureResource& resourceData_, DefaultResourceUploader& uploader_);
 
+	/* Model */
+
+	/* this will be used to represent a model */
+	struct Model
+	{
+		/* resources */
+		std::vector<ID3D12Resource*>			textures;
+
+		std::vector<ID3D12Resource*>			vertexBuffers;
+		std::vector<D3D12_VERTEX_BUFFER_VIEW>	vBufferViews;
+
+		ID3D12Resource*							indexBuffer;
+		D3D12_INDEX_BUFFER_VIEW					iBufferView;
+
+		GPM::Transform trs;
+	};
+
+	struct ModelResource
+	{
+		/* resources */
+		ID3D12DescriptorHeap**			descHeap = nullptr;
+		std::vector<ID3D12Resource*>*	textures;
+		std::vector<ID3D12Resource*>*	vertexBuffers;
+
+		/* the models created from the info */
+		std::vector<Model> models;
+	};
+
+
+
+	/* used to load a gltf2.0 model onto the GPU
+	 * /!\ this method will merge all the mesh and pre-transform all the vertices /!\ */
+	bool UploadModel(const std::string& filePath, ModelResource& modelResource, DefaultResourceUploader& uploader_);
+
+	bool UploadMesh(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_);
+	bool UploadMeshBuffer(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_);
+	bool UploadTexture(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_);
 }

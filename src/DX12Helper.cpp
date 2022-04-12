@@ -19,6 +19,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "tiny_loader/tiny_gltf.h"
 
+/* math */
+using namespace GPM;
+
 #undef max
 
 /*===== SHADER =====*/
@@ -391,5 +394,173 @@ bool DX12Helper::CreateTexture(const std::string& filePath_, TextureResource& re
 
 	uploader_.device->CreateShaderResourceView(*resourceData_.buffer, &srvDesc, resourceData_.srvHandle);
 
+	return true;
+}
+
+/*===== MODEL  =====*/
+
+bool DX12Helper::UploadModel(const std::string& filePath, ModelResource& modelResource, DefaultResourceUploader& uploader_)
+{
+	tinygltf::Model		model;
+	tinygltf::TinyGLTF	loader;
+	std::string			err;
+	std::string			warn;
+
+	if (!loader.LoadASCIIFromFile(&model, &err, &warn, filePath.c_str()))
+	{
+		printf("Error Loading model: %s", err.c_str());
+		return false;
+	}
+
+	if (!warn.empty())
+		printf("Warning Loading model: %s", warn.c_str());
+
+	if (!UploadMeshBuffer(model, modelResource, uploader_))
+		return false;
+
+	modelResource.models.resize(model.scenes[model.defaultScene].nodes.size());
+
+	if (!UploadMesh(model,modelResource,uploader_))
+		return false;
+
+	return true;
+}
+
+bool DX12Helper::UploadMesh(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_)
+{
+	const tinygltf::Scene& dftScene = gltfModel.scenes[gltfModel.defaultScene];
+	for (int node = 0; node < dftScene.nodes.size(); node++)
+	{
+		const tinygltf::Node& currNode	= gltfModel.nodes[node];
+		const tinygltf::Mesh& mesh		= gltfModel.meshes[currNode.mesh];
+		Model& currModel				= modelResource.models[node];
+
+		if (!currNode.scale.empty())
+		{
+			currModel.trs.scaleX(static_cast<f32>(currNode.scale[0]));
+			currModel.trs.scaleY(static_cast<f32>(currNode.scale[1]));
+			currModel.trs.scaleZ(static_cast<f32>(currNode.scale[2]));
+		}
+
+		if (!currNode.rotation.empty())
+		{
+			currModel.trs.rotateX(static_cast<f32>(currNode.rotation[0]));
+			currModel.trs.rotateY(static_cast<f32>(currNode.rotation[1]));
+			currModel.trs.rotateZ(static_cast<f32>(currNode.rotation[2]));
+		}
+
+		if (!currNode.translation.empty())
+		{
+			currModel.trs.translateX(static_cast<f32>(currNode.translation[0]));
+			currModel.trs.translateY(static_cast<f32>(currNode.translation[1]));
+			currModel.trs.translateZ(static_cast<f32>(currNode.translation[2]));
+		}
+
+
+		for (int primitive = 0; primitive < mesh.primitives.size(); primitive++)
+		{
+			const tinygltf::Primitive& currPrimitives = mesh.primitives[primitive];
+			currModel.vBufferViews.resize(3);
+			currModel.vertexBuffers.resize(3);
+
+			for (const std::pair<const std::string, int>& attribute : currPrimitives.attributes)
+			{
+				const tinygltf::Accessor&	access		= gltfModel.accessors[attribute.second];
+				const tinygltf::BufferView& bufferView	= gltfModel.bufferViews[access.bufferView];
+
+				UINT size	= static_cast<UINT>(bufferView.byteLength - access.byteOffset);
+				UINT stride	= access.ByteStride(bufferView);
+				D3D12_GPU_VIRTUAL_ADDRESS loc = (*modelResource.vertexBuffers)[bufferView.buffer]->GetGPUVirtualAddress() + bufferView.byteOffset + access.byteOffset;
+
+				int ind = -1;
+				if (attribute.first == "NORMAL")
+					ind = 2;
+				else if (attribute.first == "POSITION")
+					ind = 0;
+				else if (attribute.first == "TEXCOORD_0")
+					ind = 1;
+				else
+					return false;
+
+				currModel.vBufferViews[ind].BufferLocation	= loc;
+				currModel.vBufferViews[ind].SizeInBytes		= size;
+				currModel.vBufferViews[ind].StrideInBytes	= stride;
+
+				currModel.vertexBuffers[ind] = (*modelResource.vertexBuffers)[bufferView.buffer];
+			}
+
+			if (currPrimitives.indices >= 0)
+			{
+				const tinygltf::Accessor& access = gltfModel.accessors[currPrimitives.indices];
+				const tinygltf::BufferView& bufferView = gltfModel.bufferViews[access.bufferView];
+
+				UINT size	= static_cast<UINT>(bufferView.byteLength - access.byteOffset);
+				UINT stride = access.ByteStride(bufferView);
+				D3D12_GPU_VIRTUAL_ADDRESS loc = (*modelResource.vertexBuffers)[bufferView.buffer]->GetGPUVirtualAddress() + bufferView.byteOffset + access.byteOffset;
+
+				currModel.iBufferView.BufferLocation	= loc;
+				currModel.iBufferView.SizeInBytes		= size;
+
+				switch (access.componentType)
+				{
+					case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+						currModel.iBufferView.Format = DXGI_FORMAT_R8_UINT;
+						break;
+					case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+						currModel.iBufferView.Format = DXGI_FORMAT_R16_UINT;
+						break;
+					case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+						currModel.iBufferView.Format = DXGI_FORMAT_R32_UINT;
+						break;
+				}
+
+				currModel.indexBuffer = (*modelResource.vertexBuffers)[bufferView.buffer];
+			}
+		}
+	}
+
+	return true;
+}
+
+bool DX12Helper::UploadMeshBuffer(const tinygltf::Model& gltfModel, ModelResource& model, DefaultResourceUploader& uploader_)
+{
+	model.vertexBuffers->resize(gltfModel.buffers.size());
+	for (int i = 0; i < gltfModel.buffers.size(); i++)
+	{
+		const tinygltf::Buffer& buffer = gltfModel.buffers[i];
+
+		DefaultResource dftResource;
+		dftResource.buffer = model.vertexBuffers->data() + i;
+
+		D3D12_SUBRESOURCE_DATA data = {};
+		data.pData		= buffer.data.data();
+		data.RowPitch	= buffer.data.size();
+		data.SlicePitch = buffer.data.size();
+
+		CreateDefaultBuffer(&data, dftResource, uploader_);
+	}
+
+	return true;
+}
+
+bool DX12Helper::UploadTexture(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_)
+{
+	const tinygltf::Scene& dftScene = gltfModel.scenes[gltfModel.defaultScene];
+	for (int node = 0; node < dftScene.nodes.size(); node++)
+	{
+		const tinygltf::Node&	currNode	= gltfModel.nodes[node];
+		const tinygltf::Mesh&	mesh		= gltfModel.meshes[currNode.mesh];
+		Model&					currModel	= modelResource.models[node];
+
+		for (int primitive = 0; primitive < mesh.primitives.size(); primitive++)
+		{
+			const tinygltf::Primitive& currPrimitive = mesh.primitives[primitive];
+			const tinygltf::Material& currMat = gltfModel.materials[currPrimitive.material];
+
+			//currMat.pbrMetallicRoughness.baseColorTexture;
+			//
+			//gltfModel.images[0].
+		}
+	}
 	return true;
 }
