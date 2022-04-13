@@ -62,16 +62,13 @@ bool DX12Helper::CompilePixel(const std::string& shaderSource_, ID3DBlob** PS_, 
 
 /*===== RESOURCES =====*/
 
-DX12Helper::DefaultResource::~DefaultResource()
-{
-	if (uploadBuffer)
-		uploadBuffer->Release();
-}
-
 DX12Helper::DefaultResourceUploader::~DefaultResourceUploader()
 {
 	if (copyList)
 		copyList->Release();
+
+	for (int i = 0; i < uploadBuffers.size(); i++)
+		uploadBuffers[i]->Release();
 }
 
 bool DX12Helper::MakeUploader(DefaultResourceUploader& uploader_, const DX12Handle& dx12Handle_)
@@ -92,7 +89,7 @@ bool DX12Helper::MakeUploader(DefaultResourceUploader& uploader_, const DX12Hand
 	return true;
 }
 
-bool DX12Helper::CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, DefaultResource& resourceData_, const DefaultResourceUploader& uploader_)
+bool DX12Helper::CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, DefaultResource& resourceData_, DefaultResourceUploader& uploader_)
 {
 	HRESULT hr;
 
@@ -109,7 +106,8 @@ bool DX12Helper::CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, Defaul
 	resDesc.MipLevels			= 1;
 	resDesc.Layout				= D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&resourceData_.uploadBuffer));
+	uploader_.uploadBuffers.resize(uploader_.uploadBuffers.size() + 1);
+	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploader_.uploadBuffers.back()));
 
 	if (FAILED(hr))
 	{
@@ -127,7 +125,7 @@ bool DX12Helper::CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, Defaul
 		return false;
 	}
 
-	UpdateSubresources(uploader_.copyList, *resourceData_.buffer, resourceData_.uploadBuffer, 0, 0, 1, bufferData_);
+	UpdateSubresources(uploader_.copyList, *resourceData_.buffer, uploader_.uploadBuffers.back(), 0, 0, 1, bufferData_);
 
 	D3D12_RESOURCE_BARRIER barrier = {};
 	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -270,8 +268,6 @@ DX12Helper::TextureResource::~TextureResource()
 {
 	if (texData.pData)
 		stbi_image_free((void*)texData.pData);
-	if (uploadBuffer)
-		uploadBuffer->Release();
 }
 
 
@@ -333,57 +329,12 @@ void DX12Helper::LoadTexture(const std::string& filePath_, D3D12_SUBRESOURCE_DAT
 
 bool DX12Helper::CreateTexture(const std::string& filePath_, TextureResource& resourceData_, DefaultResourceUploader& uploader_)
 {
-	HRESULT hr;
-
 	/* load texture Data */
 	D3D12_RESOURCE_DESC texDesc = {};
 	LoadTexture(filePath_, resourceData_.texData, texDesc);
 
-	/* create upload heap to send texture info to default */
-	D3D12_HEAP_PROPERTIES heapProp = {};
-	heapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-	D3D12_RESOURCE_DESC uploadDesc = {};
-
-	uploadDesc.Dimension			= D3D12_RESOURCE_DIMENSION_BUFFER;
-	uploadDesc.SampleDesc.Count		= 1;
-	uploader_.device->GetCopyableFootprints(&texDesc, 0, 1, 0, nullptr, nullptr, nullptr, &uploadDesc.Width);
-	uploadDesc.Height				= 1;
-	uploadDesc.DepthOrArraySize		= 1;
-	uploadDesc.MipLevels			= 1;
-	uploadDesc.Layout				= D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&resourceData_.uploadBuffer));
-
-	if (FAILED(hr))
-	{
-		printf("Failing creating default buffer upload heap: %s\n", std::system_category().message(hr).c_str());
+	if (!CreateRawTexture(texDesc, resourceData_, uploader_))
 		return false;
-	}
-
-	/* create default heap, technically the last place where the texture will be sent */
-	heapProp.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(resourceData_.buffer));
-
-	if (FAILED(hr))
-	{
-		printf("Failing creating default buffer resource : %s\n", std::system_category().message(hr).c_str());
-		return false;
-	}
-
-	/* uploading and barrier for making the application wait for the ressource to be uploaded on gpu */
-	UpdateSubresources(uploader_.copyList, *resourceData_.buffer, resourceData_.uploadBuffer, 0, 0, 1, &resourceData_.texData);
-
-	D3D12_RESOURCE_BARRIER barrier = {};
-	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Transition.pResource	= *resourceData_.buffer;
-	barrier.Transition.StateBefore	= D3D12_RESOURCE_STATE_COPY_DEST;
-	barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-	uploader_.copyList->ResourceBarrier(1, &barrier);
-
 
 	/* make the shader resource view from buffer and texDesc to make it available to use */
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -397,6 +348,59 @@ bool DX12Helper::CreateTexture(const std::string& filePath_, TextureResource& re
 	return true;
 }
 
+bool DX12Helper::CreateRawTexture(const D3D12_RESOURCE_DESC& texDesc_, TextureResource& resourceData_, DefaultResourceUploader& uploader_)
+{
+	HRESULT hr;
+
+	/* create upload heap to send texture info to default */
+	D3D12_HEAP_PROPERTIES heapProp = {};
+	heapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	D3D12_RESOURCE_DESC uploadDesc = {};
+
+	uploadDesc.Dimension		= D3D12_RESOURCE_DIMENSION_BUFFER;
+	uploadDesc.SampleDesc.Count = 1;
+	uploader_.device->GetCopyableFootprints(&texDesc_, 0, 1, 0, nullptr, nullptr, nullptr, &uploadDesc.Width);
+	uploadDesc.Height			= 1;
+	uploadDesc.DepthOrArraySize = 1;
+	uploadDesc.MipLevels		= 1;
+	uploadDesc.Layout			= D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	uploader_.uploadBuffers.resize(uploader_.uploadBuffers.size() + 1);
+	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploader_.uploadBuffers.back()));
+
+	if (FAILED(hr))
+	{
+		printf("Failing creating default buffer upload heap: %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	/* create default heap, technically the last place where the texture will be sent */
+	heapProp.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &texDesc_, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(resourceData_.buffer));
+
+	if (FAILED(hr))
+	{
+		printf("Failing creating default buffer resource : %s\n", std::system_category().message(hr).c_str());
+		return false;
+	}
+
+	/* uploading and barrier for making the application wait for the ressource to be uploaded on gpu */
+	UpdateSubresources(uploader_.copyList, *resourceData_.buffer, uploader_.uploadBuffers.back(), 0, 0, 1, &resourceData_.texData);
+
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource	= *resourceData_.buffer;
+	barrier.Transition.StateBefore	= D3D12_RESOURCE_STATE_COPY_DEST;
+	barrier.Transition.StateAfter	= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	uploader_.copyList->ResourceBarrier(1, &barrier);
+
+	return true;
+}
+
 /*===== MODEL  =====*/
 
 bool DX12Helper::UploadModel(const std::string& filePath, ModelResource& modelResource, DefaultResourceUploader& uploader_)
@@ -406,21 +410,27 @@ bool DX12Helper::UploadModel(const std::string& filePath, ModelResource& modelRe
 	std::string			err;
 	std::string			warn;
 
+	stbi_set_flip_vertically_on_load(1);
 	if (!loader.LoadASCIIFromFile(&model, &err, &warn, filePath.c_str()))
 	{
 		printf("Error Loading model: %s", err.c_str());
 		return false;
 	}
+	stbi_set_flip_vertically_on_load(0);
 
 	if (!warn.empty())
 		printf("Warning Loading model: %s", warn.c_str());
 
-	if (!UploadMeshBuffer(model, modelResource, uploader_))
+	if (!UploadMeshBuffer(model, modelResource, uploader_) || !UploadTextureBuffer(model, modelResource, uploader_))
 		return false;
 
 	modelResource.models.resize(model.scenes[model.defaultScene].nodes.size());
 
-	if (!UploadMesh(model,modelResource,uploader_))
+	if (!UploadMesh(model,modelResource,uploader_) || !UploadTexture(model, modelResource, uploader_))
+		return false;
+
+	/* upload all created resources */
+	if (!UploadResources(uploader_))
 		return false;
 
 	return true;
@@ -434,6 +444,7 @@ bool DX12Helper::UploadMesh(const tinygltf::Model& gltfModel, ModelResource& mod
 		const tinygltf::Node& currNode	= gltfModel.nodes[node];
 		const tinygltf::Mesh& mesh		= gltfModel.meshes[currNode.mesh];
 		Model& currModel				= modelResource.models[node];
+		currModel.name					= currNode.name;
 
 		if (!currNode.scale.empty())
 		{
@@ -489,10 +500,14 @@ bool DX12Helper::UploadMesh(const tinygltf::Model& gltfModel, ModelResource& mod
 				currModel.vertexBuffers[ind] = (*modelResource.vertexBuffers)[bufferView.buffer];
 			}
 
+			/* count should not change for a single primitive (info per vertex )*/
+			currModel.count = gltfModel.accessors[currPrimitives.attributes.begin()->second].count;
+
 			if (currPrimitives.indices >= 0)
 			{
-				const tinygltf::Accessor& access = gltfModel.accessors[currPrimitives.indices];
-				const tinygltf::BufferView& bufferView = gltfModel.bufferViews[access.bufferView];
+				const tinygltf::Accessor& access		= gltfModel.accessors[currPrimitives.indices];
+				currModel.count							= access.count;
+				const tinygltf::BufferView& bufferView	= gltfModel.bufferViews[access.bufferView];
 
 				UINT size	= static_cast<UINT>(bufferView.byteLength - access.byteOffset);
 				UINT stride = access.ByteStride(bufferView);
@@ -522,15 +537,15 @@ bool DX12Helper::UploadMesh(const tinygltf::Model& gltfModel, ModelResource& mod
 	return true;
 }
 
-bool DX12Helper::UploadMeshBuffer(const tinygltf::Model& gltfModel, ModelResource& model, DefaultResourceUploader& uploader_)
+bool DX12Helper::UploadMeshBuffer(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_)
 {
-	model.vertexBuffers->resize(gltfModel.buffers.size());
+	modelResource.vertexBuffers->resize(gltfModel.buffers.size());
 	for (int i = 0; i < gltfModel.buffers.size(); i++)
 	{
 		const tinygltf::Buffer& buffer = gltfModel.buffers[i];
 
-		DefaultResource dftResource;
-		dftResource.buffer = model.vertexBuffers->data() + i;
+		DefaultResource dftResource = {};
+		dftResource.buffer = modelResource.vertexBuffers->data() + i;
 
 		D3D12_SUBRESOURCE_DATA data = {};
 		data.pData		= buffer.data.data();
@@ -543,8 +558,107 @@ bool DX12Helper::UploadMeshBuffer(const tinygltf::Model& gltfModel, ModelResourc
 	return true;
 }
 
+bool DX12Helper::UploadTextureBuffer(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_)
+{
+	modelResource.textures->resize(gltfModel.images.size());
+
+	D3D12_RESOURCE_DESC texDesc = {};
+	texDesc.Dimension			= D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	texDesc.Alignment			= 0;		// may be 0, 4KB, 64KB, or 4MB. 0 will let runtime decide between 64KB and 4MB (4MB for multi-sampled textures)
+	texDesc.DepthOrArraySize	= 1;		// if 3d image, depth of 3d image. Otherwise an array of 1D or 2D textures (we only have one image, so we set 1)
+	texDesc.MipLevels			= 1;		// Number of mipmaps. We are not generating mipmaps for this texture, so we have only one level
+	texDesc.SampleDesc.Count	= 1;		// This is the number of samples per pixel, we just want 1 sample
+	texDesc.SampleDesc.Quality	= 0;		// The quality level of the samples. Higher is better quality, but worse performance
+	texDesc.Layout				= D3D12_TEXTURE_LAYOUT_UNKNOWN; // The arrangement of the pixels. Setting to unknown lets the driver choose the most efficient one
+	texDesc.Flags				= D3D12_RESOURCE_FLAG_NONE; // no flags
+
+	for (int images = 0; images < gltfModel.images.size(); images++)
+	{
+		const tinygltf::Image& currImage = gltfModel.images[images];
+
+		TextureResource textureResource = {};
+
+		/* the gpu resource we will fill up in */
+		textureResource.buffer			= modelResource.textures->data() + images;
+
+		BYTE* tex		= (BYTE*)currImage.image.data();
+		int channels	= currImage.component;
+		switch (channels)
+		{
+			case 1: { texDesc.Format = DXGI_FORMAT_R8_UNORM; break; }
+			case 2: { texDesc.Format = DXGI_FORMAT_R8G8_UNORM; break; }
+				  /* there is no 3-bytes dxgi type in d3d12 (gpu does not support anymore), expanding to 4 */
+			case 3:
+			{
+				int arraySize = currImage.width * currImage.height * 4;
+				BYTE* old = tex;
+				tex = (BYTE*)malloc(arraySize);
+				BYTE max = std::numeric_limits<BYTE>().max();
+
+				for (int i = 0, j = 0; i < arraySize; i += 4, j += 3)
+				{
+					tex[i] = old[j];
+					tex[i + 1] = old[j + 1];
+					tex[i + 2] = old[j + 2];
+					tex[i + 3] = max;
+				}
+
+				stbi_image_free(old);
+				channels = 4;
+			}
+			default: { texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; break; }
+		};
+
+		/* the actual data to send */
+		textureResource.texData.pData		= tex;
+		textureResource.texData.RowPitch	= currImage.width * channels * sizeof(BYTE);
+		textureResource.texData.SlicePitch	= textureResource.texData.RowPitch * currImage.height;
+
+		texDesc.Width	= currImage.width;	// width of the texture
+		texDesc.Height	= currImage.height;	// height of the texture
+
+		if (!CreateRawTexture(texDesc, textureResource, uploader_))
+			return false;
+
+		textureResource.texData.pData = nullptr;
+	}
+	return true;
+}
+
 bool DX12Helper::UploadTexture(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_)
 {
+	HRESULT hr;
+
+	/* create the descriptor heap that will store our srv */
+	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+	heapDesc.Flags	= D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	heapDesc.Type	= D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	/* we will only consider pbr with normal material*/
+	heapDesc.NumDescriptors = 3;
+
+	modelResource.descHeaps->resize(gltfModel.materials.size());
+	for (int i = 0; i < gltfModel.materials.size(); i++)
+	{
+		const tinygltf::Material& currMat = gltfModel.materials[i];
+
+		ID3D12DescriptorHeap** currDescHeap = &(*modelResource.descHeaps)[i];
+		hr = uploader_.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(currDescHeap));
+
+		if (FAILED(hr))
+		{
+			printf("Failing creating main descriptor heap for %s: %s\n", currMat.name.c_str(), std::system_category().message(hr).c_str());
+			return false;
+		}
+	}
+
+	/* make the shader resource view to make it available to use */
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension			= D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels		= 1;
+
+	UINT offset = uploader_.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
 	const tinygltf::Scene& dftScene = gltfModel.scenes[gltfModel.defaultScene];
 	for (int node = 0; node < dftScene.nodes.size(); node++)
 	{
@@ -554,12 +668,35 @@ bool DX12Helper::UploadTexture(const tinygltf::Model& gltfModel, ModelResource& 
 
 		for (int primitive = 0; primitive < mesh.primitives.size(); primitive++)
 		{
-			const tinygltf::Primitive& currPrimitive = mesh.primitives[primitive];
-			const tinygltf::Material& currMat = gltfModel.materials[currPrimitive.material];
+			const tinygltf::Primitive&	currPrimitive	= mesh.primitives[primitive];
+			const tinygltf::Material&	currMat			= gltfModel.materials[currPrimitive.material];
+			ID3D12DescriptorHeap* currDescHeap			= (*modelResource.descHeaps)[currPrimitive.material];
+			D3D12_CPU_DESCRIPTOR_HANDLE handle			= currDescHeap->GetCPUDescriptorHandleForHeapStart();
 
-			//currMat.pbrMetallicRoughness.baseColorTexture;
-			//
-			//gltfModel.images[0].
+			/* set desc heap */
+			modelResource.models[node].descHeap = currDescHeap;
+
+			const int currImages[3] = { currMat.pbrMetallicRoughness.baseColorTexture.index, 
+													currMat.normalTexture.index,
+													currMat.pbrMetallicRoughness.metallicRoughnessTexture.index};
+
+			for (int i = 0; i < _countof(currImages); i++)
+			{
+				switch (gltfModel.images[currImages[i]].component)
+				{
+					case 1: { srvDesc.Format = DXGI_FORMAT_R8_UNORM; break; }
+					case 2: { srvDesc.Format = DXGI_FORMAT_R8G8_UNORM; break; }
+					/* there is no 3-bytes dxgi type in d3d12 (gpu does not support anymore), expanding to 4 */
+					case 3:
+					default: { srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; break; }
+				};
+
+				uploader_.device->CreateShaderResourceView((*modelResource.textures)[currImages[i]], &srvDesc, handle);
+
+				handle.ptr += offset;
+
+				modelResource.models[node].textures.push_back((*modelResource.textures)[currImages[i]]);
+			}
 		}
 	}
 	return true;

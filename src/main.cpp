@@ -21,6 +21,7 @@
 #include "Demo/DemoRayCPUGradiant.hpp"
 #include "Demo/DemoRayCPUSphere.hpp"
 #include "Demo/DemoQuad.hpp"
+#include "Demo/DemoModel.hpp"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -97,6 +98,7 @@ int main()
 	std::vector<std::unique_ptr<Demo>> demos;
 	demos.push_back(std::make_unique<DemoTriangle>(demoInputs,dx12handle));
 	demos.push_back(std::make_unique<DemoQuad>(demoInputs, dx12handle));
+	demos.push_back(std::make_unique<DemoModel>(demoInputs, dx12handle));
 	demos.push_back(std::make_unique<DemoRayCPUGradiant>(demoInputs, dx12handle));
 	demos.push_back(std::make_unique<DemoRayCPUSphere>(demoInputs, dx12handle));
 

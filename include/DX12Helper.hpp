@@ -31,9 +31,6 @@ namespace DX12Helper
 	struct DefaultResource
 	{
 		ID3D12Resource**			buffer			= nullptr;
-		ID3D12Resource*				uploadBuffer	= nullptr;
-
-		~DefaultResource();
 	};
 
 	struct DefaultResourceUploader
@@ -43,11 +40,13 @@ namespace DX12Helper
 		ID3D12CommandQueue*			queue		= nullptr;
 		HANDLE const*				fenceEvent	= nullptr;
 
+		std::vector<ID3D12Resource*> uploadBuffers;
+
 		~DefaultResourceUploader();
 	};
 
 	bool MakeUploader(DefaultResourceUploader& uploader_, const DX12Handle& dx12Handle_);
-	bool CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, DefaultResource& resourceData_, const DefaultResourceUploader& uploader_);
+	bool CreateDefaultBuffer(D3D12_SUBRESOURCE_DATA* bufferData_, DefaultResource& resourceData_, DefaultResourceUploader& uploader_);
 	bool UploadResources(const DefaultResourceUploader& uploader_);
 
 	struct ConstantResourceUploader
@@ -77,7 +76,6 @@ namespace DX12Helper
 	struct TextureResource
 	{
 		ID3D12Resource**				buffer			= nullptr;
-		ID3D12Resource*					uploadBuffer	= nullptr;
 		D3D12_CPU_DESCRIPTOR_HANDLE		srvHandle;
 
 		D3D12_SUBRESOURCE_DATA texData;
@@ -90,12 +88,18 @@ namespace DX12Helper
 	void LoadTexture(const std::string& filePath_, D3D12_SUBRESOURCE_DATA& texData, D3D12_RESOURCE_DESC& texDesc_);
 	bool CreateTexture(const std::string& filePath_, TextureResource& resourceData_, DefaultResourceUploader& uploader_);
 
+	/* assumes data is already filled up in resourceData_.texData*/
+	bool CreateRawTexture(const D3D12_RESOURCE_DESC& texDesc_, TextureResource& resourceData_, DefaultResourceUploader& uploader_);
+
 	/* Model */
 
 	/* this will be used to represent a model */
 	struct Model
 	{
+		std::string name;
+
 		/* resources */
+		ID3D12DescriptorHeap*					descHeap;
 		std::vector<ID3D12Resource*>			textures;
 
 		std::vector<ID3D12Resource*>			vertexBuffers;
@@ -104,15 +108,17 @@ namespace DX12Helper
 		ID3D12Resource*							indexBuffer;
 		D3D12_INDEX_BUFFER_VIEW					iBufferView;
 
+		UINT count = 0;
+
 		GPM::Transform trs;
 	};
 
 	struct ModelResource
 	{
 		/* resources */
-		ID3D12DescriptorHeap**			descHeap = nullptr;
-		std::vector<ID3D12Resource*>*	textures;
-		std::vector<ID3D12Resource*>*	vertexBuffers;
+		std::vector<ID3D12DescriptorHeap*>*	descHeaps		= nullptr;
+		std::vector<ID3D12Resource*>*		textures		= nullptr;
+		std::vector<ID3D12Resource*>*		vertexBuffers	= nullptr;
 
 		/* the models created from the info */
 		std::vector<Model> models;
@@ -126,5 +132,6 @@ namespace DX12Helper
 
 	bool UploadMesh(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_);
 	bool UploadMeshBuffer(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_);
+	bool UploadTextureBuffer(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_);
 	bool UploadTexture(const tinygltf::Model& gltfModel, ModelResource& modelResource, DefaultResourceUploader& uploader_);
 }
