@@ -120,7 +120,7 @@ bool DemoModel::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE&
 		float4 outPos	= mul(float4(position,1.0),model);
 		outPos			= mul(outPos,view);
 		output.position = mul(outPos,perspective);
-		output.uv		= uv;
+		output.uv		= float2(uv.x,1.0 - uv.y);
 		output.normal	= normal;
 	
 		return output;
@@ -133,6 +133,7 @@ bool DemoModel::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE&
 
 	float4 frag(float4 position : SV_POSITION, float2 uv : UV, float3 normal : NORMAL) : SV_TARGET
 	{
+		
 		return albedo.Sample(wrap,uv);
 	}
 	)";
@@ -232,9 +233,9 @@ bool DemoModel::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECOD
 
 	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
 	{
-		{ "POSITION",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(DemoModelVertex, pos), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "UV",			0, DXGI_FORMAT_R32G32_FLOAT,	0, offsetof(DemoModelVertex, uv), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL",		0, DXGI_FORMAT_R32G32B32_FLOAT,	0, offsetof(DemoModelVertex, normal), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "POSITION",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "UV",			0, DXGI_FORMAT_R32G32_FLOAT,	1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL",		0, DXGI_FORMAT_R32G32B32_FLOAT,	2, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 
 	// fill out an input layout description structure

@@ -410,13 +410,11 @@ bool DX12Helper::UploadModel(const std::string& filePath, ModelResource& modelRe
 	std::string			err;
 	std::string			warn;
 
-	stbi_set_flip_vertically_on_load(1);
 	if (!loader.LoadASCIIFromFile(&model, &err, &warn, filePath.c_str()))
 	{
 		printf("Error Loading model: %s", err.c_str());
 		return false;
 	}
-	stbi_set_flip_vertically_on_load(0);
 
 	if (!warn.empty())
 		printf("Warning Loading model: %s", warn.c_str());
@@ -426,11 +424,11 @@ bool DX12Helper::UploadModel(const std::string& filePath, ModelResource& modelRe
 
 	modelResource.models.resize(model.scenes[model.defaultScene].nodes.size());
 
-	if (!UploadMesh(model,modelResource,uploader_) || !UploadTexture(model, modelResource, uploader_))
-		return false;
-
 	/* upload all created resources */
 	if (!UploadResources(uploader_))
+		return false;
+
+	if (!UploadMesh(model,modelResource,uploader_) || !UploadTexture(model, modelResource, uploader_))
 		return false;
 
 	return true;
@@ -510,7 +508,6 @@ bool DX12Helper::UploadMesh(const tinygltf::Model& gltfModel, ModelResource& mod
 				const tinygltf::BufferView& bufferView	= gltfModel.bufferViews[access.bufferView];
 
 				UINT size	= static_cast<UINT>(bufferView.byteLength - access.byteOffset);
-				UINT stride = access.ByteStride(bufferView);
 				D3D12_GPU_VIRTUAL_ADDRESS loc = (*modelResource.vertexBuffers)[bufferView.buffer]->GetGPUVirtualAddress() + bufferView.byteOffset + access.byteOffset;
 
 				currModel.iBufferView.BufferLocation	= loc;
