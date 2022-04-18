@@ -31,6 +31,15 @@ struct DemoModelConstantBuffer
 	GPM::mat4 model;
 };
 
+struct DemoModelLightBuffer
+{
+	GPM::Vec3 camPos;
+	float padding;
+	GPM::Vec3 lightDir;
+	float padding2;
+	GPM::Vec4 lightColor;
+};
+
 DemoModel::~DemoModel()
 {
 	if (_rootSignature)
@@ -71,12 +80,7 @@ DemoModel::DemoModel(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
 	if (!MakeModel(dx12Handle_))
 		return;
 
-	/* make shader and pipeline */
-	D3D12_SHADER_BYTECODE vertex;
-	D3D12_SHADER_BYTECODE pixel;
-	if (!MakeShader(vertex, pixel) || !MakePipeline(dx12Handle_, vertex, pixel))
-		return;
-
+	_constantBuffers.resize(_descHeaps.size() * (_models.size() + 1));
 	/* making constant buffer */
 	for (int i = 0; i < _descHeaps.size(); i++)
 	{
@@ -84,13 +88,24 @@ DemoModel::DemoModel(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
 		cbUploader.device	= dx12Handle_._device;
 		cbUploader.descHeap = &_descHeaps[i];
 
-		if (!DX12Helper::CreateCBufferHeap(1, cbUploader))
+		if (!DX12Helper::CreateCBufferHeap(_models.size() + 1, cbUploader))
 			break;
 
+		for (int j = 0; j < _models.size(); j++)
+		{
+			if (!DX12Helper::CreateCBuffer(sizeof(DemoModelConstantBuffer), _constantBuffers[(i * (_models.size() + 1)) + j], cbUploader))
+				break;
+		}
 
-		if (!DX12Helper::CreateCBuffer(sizeof(DemoModelConstantBuffer), _constantBuffers[i], cbUploader))
+		if (!DX12Helper::CreateCBuffer(sizeof(DemoModelLightBuffer), _constantBuffers[(i * (_models.size() + 1)) + _models.size()], cbUploader))
 			break;
 	}
+
+	/* make shader and pipeline */
+	D3D12_SHADER_BYTECODE vertex;
+	D3D12_SHADER_BYTECODE pixel;
+	if (!MakeShader(vertex, pixel) || !MakePipeline(dx12Handle_, vertex, pixel))
+		return;
 
 	viewport.MaxDepth = 1.0f;
 }
@@ -98,32 +113,146 @@ DemoModel::DemoModel(const DemoInputs& inputs_, const DX12Handle& dx12Handle_)
 bool DemoModel::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE& pixel)
 {
 	ID3DBlob* tmp;
-	std::string source = (const char*)R"(#line 81
-	struct VOut
-	{
-		float4 position : SV_POSITION;
-		float2 uv		: UV;
-		float3 normal	: NORMAL;
-	};
+	std::string source = (const char*)R"(#line 116
+    struct VOut
+    {
+        float4 position : SV_POSITION;
+        float2 uv		: UV; 
+        float3 normal	: NORMAL;
+        float3 fragPos	: FRAGPOS;
+        float4 view		: VIEW;
+    };
 
 	cbuffer ConstantBuffer : register(b0)
 	{
-		float4x4 perspective;
+		float4x4 proj;
 		float4x4 view;
 		float4x4 model;
+	};
+
+	cbuffer LightBuffer : register(b1)
+	{
+		float3	camPos;
+		float	padding;
+		float3	lightDir;
+		float	padding2;
+		float4	lightColor;
 	};	
 
 	VOut vert(float3 position : POSITION, float2 uv : UV, float3 normal : NORMAL)
 	{
 		VOut output;
+
+        output.fragPos  = mul(float4(position,1.0),model).xyz;
+        output.view     = mul(float4(output.fragPos,1.0),view);
+        output.position = mul(output.view, proj);
+        output.uv.x     = uv.x;
+		output.uv.y		= 1.0f - uv.y;
+        output.normal   = normalize(mul(normal,(float3x3)model));
 	
-		float4 outPos	= mul(float4(position,1.0),model);
-		outPos			= mul(outPos,view);
-		output.position = mul(outPos,perspective);
-		output.uv		= float2(uv.x,1.0 - uv.y);
-		output.normal	= normal;
+		//float4 outPos	= mul(float4(position,1.0),model);
+		//outPos			= mul(outPos,view);
+		//output.position = mul(outPos,perspective);
+		//output.uv		= float2(uv.x,1.0 - uv.y);
+		//output.normal	= normal;
 	
 		return output;
+	}
+
+	/* this is being took from this link: http://www.thetenthplanet.de/archives/1180 
+     * and traduced to hlsl */
+    float3x3 cotangent_frame(float3 normal, float3 p, float2 uv)
+    {
+        // get edge vectors of the pixel triangle
+        float3 dp1 = ddx( p );
+        float3 dp2 = ddy( p );
+        float2 duv1 = ddx( uv );
+        float2 duv2 = ddy( uv );
+     
+        // solve the linear system
+        float3 dp2perp = cross( dp2, normal );
+        float3 dp1perp = cross( normal, dp1 );
+        float3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+        float3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+     
+        // construct a scale-invariant frame 
+        float invmax = rsqrt( max( dot(T,T), dot(B,B) ) );
+        return float3x3( T * invmax, B * invmax, normal );
+    }
+
+    float3 perturb_normal(float3 normal, float3 viewEye, float2 uv, float3 texNormal)
+    {
+        // assume N, the interpolated vertex normal and 
+        // V, the view vector (vertex to eye)
+        texNormal = (texNormal * 2.0 - 1.0);
+        float3x3 TBN = cotangent_frame(normal, viewEye, uv);
+        return normalize(mul(texNormal,TBN));
+    }
+
+	static const float PI = 3.14159265359;
+	static const float3 basic = float3(1.0,1.0,1.0);
+	
+	float DistributionGGX(float3 normal, float3 halfAngleVec, float roughness)
+	{
+		float a	 = roughness*roughness;
+		float a2 = a*a;
+		float NdotH  = max(dot(normal, halfAngleVec), 0.0);
+		float NdotH2 = NdotH*NdotH;
+
+		float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+		denom = PI * denom * denom;
+
+		return a2/max(denom,0.00000001);
+	}
+
+	float GeometrySchlickGGX(float NdotV, float roughness)
+	{
+	    float r = (roughness + 1.0);
+	    float k = (r*r) / 8.0;
+	
+	    float denom = NdotV * (1.0 - k) + k;
+		
+	    return NdotV / denom;
+	}
+
+	float GeometrySmith(float3 normal, float3 viewDir, float3 lightDir, float roughness)
+	{
+	    float NdotV = max(dot(normal, viewDir), 0.0);
+	    float NdotL = max(dot(normal, lightDir), 0.0);
+	    float ggx2  = GeometrySchlickGGX(NdotV, roughness);
+	    float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+		
+	    return ggx1 * ggx2;
+	}
+
+	float3 fresnelSchlick(float cosTheta, float3 F0)
+	{
+	    return F0 + (1.0 - F0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
+	} 
+
+	float3 compute_lighting(float3 normal, float3 position, float3 lightDir, float3 lightColor, float metallic, float roughness)
+	{
+		float3 viewDir		= normalize(camPos - position);
+		float3 halfAngleVec	= normalize(lightDir + viewDir);
+
+		float3 F0			= 0.04;
+		F0					= lerp(F0,basic,metallic);
+
+		float NDF	= DistributionGGX(normal, halfAngleVec, roughness);        
+		float G		= GeometrySmith(normal, viewDir, lightDir, roughness);      
+		float3 F	= fresnelSchlick(max(dot(halfAngleVec, viewDir), 0.0), F0);
+
+		float3 kD = 1.0 - F;
+		kD *= 1.0 - metallic;
+
+		float3 numerator	=  NDF * G * F;
+		float denominator	=  4.0 * max(dot(normal, viewDir), 0.0) * max(dot(normal, lightDir), 0.0);
+
+		float NdotL			= max(dot(normal, lightDir), 0.0);
+		float3 diffuse		= (kD* basic)*NdotL*lightColor;
+		float3 specular     = (numerator / max(denominator, 0.001))*NdotL*lightColor;
+		
+		return diffuse + specular;
 	}
 
 	Texture2D albedo		: register(t0);
@@ -131,10 +260,22 @@ bool DemoModel::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE&
 	Texture2D metalRough	: register(t2);
 	SamplerState wrap		: register(s0);
 
-	float4 frag(float4 position : SV_POSITION, float2 uv : UV, float3 normal : NORMAL) : SV_TARGET
+	float4 frag(VOut input) : SV_TARGET
 	{
-		
-		return albedo.Sample(wrap,uv);
+        float3 texNormal        = normalMap.Sample(wrap,input.uv).xyz;
+        float3 viewEye          = normalize(input.view.xyz);
+		float3 perturbNormal	= perturb_normal(input.normal,viewEye,input.uv,texNormal);
+		float metal				= metalRough.Sample(wrap,input.uv).b;
+		float rough				= metalRough.Sample(wrap,input.uv).g;
+
+		float3 lightIntensity	= compute_lighting(perturbNormal, input.fragPos, lightDir, lightColor.rgb, metal, rough) + 0.3;
+		float3 finalColor		= albedo.Sample(wrap,input.uv).rgb * lightIntensity;
+
+        float3 denominator = (finalColor + 1.0);
+
+        float3 mapped = finalColor/denominator;
+
+		return float4(mapped,1.0f);
 	}
 	)";
 
@@ -184,14 +325,20 @@ bool DemoModel::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECOD
 	/* create a root descriptor, which explains where to find the data for this root parameter */
 	D3D12_ROOT_DESCRIPTOR rootCBVDescriptor = {};
 
+	D3D12_ROOT_DESCRIPTOR rootCBLightDescriptor = {};
+	rootCBLightDescriptor.ShaderRegister = 1;
+
 	/* create a root parameter and fill it out, cbv in 0, srv in 1 */
-	D3D12_ROOT_PARAMETER  rootParameters[2] = {};
+	D3D12_ROOT_PARAMETER  rootParameters[3] = {};
 	rootParameters[0].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[0].Descriptor		= rootCBVDescriptor;
 	rootParameters[0].ShaderVisibility	= D3D12_SHADER_VISIBILITY_VERTEX;
 	rootParameters[1].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[1].DescriptorTable	= descriptorTable;
 	rootParameters[1].ShaderVisibility	= D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[2].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[2].Descriptor		= rootCBLightDescriptor;
+	rootParameters[2].ShaderVisibility	= D3D12_SHADER_VISIBILITY_PIXEL;
 
 	/* create a static sampler */
 	D3D12_STATIC_SAMPLER_DESC sampler	= {};
@@ -309,6 +456,24 @@ void DemoModel::Update(const DemoInputs& inputs_)
 	{
 		InspectTransform(_models[i]);
 	}
+
+	ImGui::Text("LightParams");
+
+	static GPM::Vec3 lightDir;
+	static GPM::Vec4 lightColor = { 1.0f,1.0f,1.0f,1.0f };
+
+	DemoModelLightBuffer lightBuffer = {};
+
+	lightBuffer.camPos = mainCamera.position;
+
+	ImGui::DragFloat3("LightDir", (float*)lightDir.e, 0.001f, 0.0f, 0.0f, "%.3f", 0);
+	ImGui::ColorPicker4("LightColor", (float*)lightColor.e);
+
+	lightBuffer.lightDir	= lightDir;
+	lightBuffer.lightColor	= lightColor;
+
+	DX12Helper::UploadCBuffer((void*)&lightBuffer, sizeof(lightBuffer), _constantBuffers[(inputs_.renderContext.currFrameIndex * (_models.size() + 1)) + _models.size()]);
+	
 }
 
 void DemoModel::InspectTransform(DX12Helper::Model& model)
@@ -319,9 +484,9 @@ void DemoModel::InspectTransform(DX12Helper::Model& model)
 	GPM::Vec3 rotate	= model.trs.eulerAngles();
 	GPM::Vec3 pos		= model.trs.translation();
 
-	ImGui::DragFloat3("Scale", (float*)scale.e, 0.01f, 0.0f, 0.0f, "%.3f", 0);
-	ImGui::DragFloat3("Rotation", (float*)rotate.e, 0.01f, 0.0f, 0.0f, "%.3f", 0);
-	ImGui::DragFloat3("Position", (float*)pos.e, 0.01f, 0.0f, 0.0f, "%.3f", 0);
+	ImGui::DragFloat3((model.name + "_Scale").c_str(), (float*)scale.e, 0.01f, 0.0f, 0.0f, "%.3f", 0);
+	ImGui::DragFloat3((model.name + "_Rotation").c_str(), (float*)rotate.e, 0.001f, -PI, PI, "%.3f", 0);
+	ImGui::DragFloat3((model.name + "_Position").c_str(), (float*)pos.e, 0.1f, 0.0f, 0.0f, "%.3f", 0);
 
 	model.trs = GPM::Transform::TRS(pos, rotate, scale);
 }
@@ -338,17 +503,20 @@ void DemoModel::Render(const DemoInputs& inputs_)
 	cmdList->SetPipelineState(_pso);
 	cmdList->RSSetViewports(1, &viewport); // set the viewports
 	cmdList->RSSetScissorRects(1, &scissorRect); // set the scissor rects
-	cmdList->SetGraphicsRootConstantBufferView(0, _constantBuffers[inputs_.renderContext.currFrameIndex].buffer->GetGPUVirtualAddress());
 
 	/* update CBuffer */
 	DemoModelConstantBuffer cBuffer = {};
 	cBuffer.perspective = GPM::Transform::perspective(60.0f * TO_RADIANS, viewport.Width / viewport.Height, 0.001f, 1000.0f);
 	cBuffer.view		= mainCamera.GetViewMatrix();
 
+	cmdList->SetGraphicsRootConstantBufferView(2, _constantBuffers[(inputs_.renderContext.currFrameIndex * (_models.size() + 1)) + _models.size()].buffer->GetGPUVirtualAddress());
+
 	for (int i = 0; i < _models.size(); i++)
 	{
+		cmdList->SetGraphicsRootConstantBufferView(0, _constantBuffers[(inputs_.renderContext.currFrameIndex * (FRAME_BUFFER_COUNT - 1)) + i].buffer->GetGPUVirtualAddress());
+
 		cBuffer.model = _models[i].trs.model;
-		DX12Helper::UploadCBuffer((void*)&cBuffer, sizeof(cBuffer), _constantBuffers[inputs_.renderContext.currFrameIndex]);
+		DX12Helper::UploadCBuffer((void*)&cBuffer, sizeof(cBuffer), _constantBuffers[(inputs_.renderContext.currFrameIndex * (FRAME_BUFFER_COUNT - 1)) + i]);
 
 		DrawModel(cmdList, _models[i]);
 	}

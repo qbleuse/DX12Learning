@@ -34,7 +34,7 @@ class ImGuiHandle
 
 	private:
 		/* for showing demo window */
-		bool	_demo_window = true;
+		bool	_demo_window = false;
 
 		/* for constructor */
 		ImGuiIO& GetIO();

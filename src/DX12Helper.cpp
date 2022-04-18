@@ -233,11 +233,10 @@ bool DX12Helper::CreateCBuffer(const UINT bufferSize, ConstantResource& resource
 	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 	cbvDesc.SizeInBytes = resDesc.Width;
 
-	resourceData_.bufferCPUHandle = (*uploader_.descHeap)->GetCPUDescriptorHandleForHeapStart();
-	resourceData_.bufferCPUHandle.ptr += uploader_.descSize * uploader_.cbNb;
+	UINT offset = uploader_.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-	resourceData_.bufferGPUHandle = (*uploader_.descHeap)->GetGPUDescriptorHandleForHeapStart();
-	resourceData_.bufferGPUHandle.ptr += uploader_.descSize * uploader_.cbNb;
+	resourceData_.bufferCPUHandle = (*uploader_.descHeap)->GetCPUDescriptorHandleForHeapStart();
+	resourceData_.bufferCPUHandle.ptr += offset * uploader_.cbNb;
 
 	uploader_.cbNb++;
 

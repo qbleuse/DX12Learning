@@ -54,7 +54,6 @@ namespace DX12Helper
 		ID3D12Device*			device		= nullptr;
 		ID3D12DescriptorHeap**	descHeap	= nullptr;
 
-		const UINT descSize = 0;
 		UINT cbNb			= 0;
 	};
 
@@ -64,7 +63,6 @@ namespace DX12Helper
 		void*			mapHandle	= nullptr;
 		
 		D3D12_CPU_DESCRIPTOR_HANDLE bufferCPUHandle;
-		D3D12_GPU_DESCRIPTOR_HANDLE bufferGPUHandle;
 
 		~ConstantResource();
 	};

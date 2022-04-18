@@ -33,8 +33,8 @@ private:
 
 
 
-	std::array<ID3D12DescriptorHeap*, FRAME_BUFFER_COUNT>			_descHeaps;
-	std::array<DX12Helper::ConstantResource, FRAME_BUFFER_COUNT>	_constantBuffers;
+	std::array<ID3D12DescriptorHeap*, FRAME_BUFFER_COUNT>	_descHeaps;
+	std::vector<DX12Helper::ConstantResource>				_constantBuffers;
 
 	std::vector<ID3D12DescriptorHeap*>	_texDescriptorHeap;
 	std::vector<ID3D12Resource*>		_textureResources;
