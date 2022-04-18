@@ -268,7 +268,7 @@ bool DemoModel::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE&
 		float metal				= metalRough.Sample(wrap,input.uv).b;
 		float rough				= metalRough.Sample(wrap,input.uv).g;
 
-		float3 lightIntensity	= compute_lighting(perturbNormal, input.fragPos, lightDir, lightColor.rgb, metal, rough) + 0.3;
+		float3 lightIntensity	= compute_lighting(perturbNormal, input.fragPos, normalize(-lightDir), lightColor.rgb, metal, rough) + 0.3;
 		float3 finalColor		= albedo.Sample(wrap,input.uv).rgb * lightIntensity;
 
         float3 denominator = (finalColor + 1.0);
