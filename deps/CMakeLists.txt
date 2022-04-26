@@ -17,7 +17,8 @@ set (DEPS_SRC_FILES
     "${DEPS_SRC}/Intersection.cpp"
     "${DEPS_SRC}/Plane.cpp"
     "${DEPS_SRC}/SegmentPlane.cpp"
-    "${DEPS_SRC}/SpherePlane.cpp")
+    "${DEPS_SRC}/SpherePlane.cpp"
+    "${DEPS_SRC}/DDSTextureLoader12.cpp")
 
 target_include_directories(DX12Learning PUBLIC "${DEPS_INC}/")
 target_include_directories(DX12Learning PUBLIC "${DEPS_INC}/imgui/")

@@ -89,6 +89,9 @@ namespace DX12Helper
 	/* assumes data is already filled up in resourceData_.texData*/
 	bool CreateRawTexture(const D3D12_RESOURCE_DESC& texDesc_, TextureResource& resourceData_, DefaultResourceUploader& uploader_);
 
+	/* DDS Texture */
+	bool CreateDDSTexture(const std::string& filePath_, TextureResource& resourceData_, DefaultResourceUploader& uploader_);
+
 	/* Model */
 
 	/* this will be used to represent a model */

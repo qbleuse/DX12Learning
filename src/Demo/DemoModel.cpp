@@ -273,6 +273,8 @@ bool DemoModel::MakeShader(D3D12_SHADER_BYTECODE& vertex, D3D12_SHADER_BYTECODE&
 
         float3 denominator = (finalColor + 1.0);
 
+		clip(albedo.Sample(wrap,input.uv).a - 0.5);
+
         float3 mapped = finalColor/denominator;
 
 		return float4(mapped,1.0f);
@@ -346,6 +348,7 @@ bool DemoModel::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECOD
 	sampler.AddressV					= D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	sampler.AddressW					= D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 	sampler.ComparisonFunc				= D3D12_COMPARISON_FUNC_NEVER;
+	sampler.Filter						= D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 	sampler.MaxLOD						= D3D12_FLOAT32_MAX;
 	sampler.ShaderVisibility			= D3D12_SHADER_VISIBILITY_PIXEL;
 
@@ -394,7 +397,7 @@ bool DemoModel::MakePipeline(const DX12Handle& dx12Handle_, D3D12_SHADER_BYTECOD
 
 	D3D12_RASTERIZER_DESC rasterDesc	= {};
 	rasterDesc.FillMode					= D3D12_FILL_MODE_SOLID;
-	rasterDesc.CullMode					= D3D12_CULL_MODE_NONE;
+	rasterDesc.CullMode					= D3D12_CULL_MODE_FRONT;
 	rasterDesc.DepthClipEnable			= TRUE;
 
 	D3D12_BLEND_DESC blenDesc						= {  };
@@ -459,7 +462,8 @@ void DemoModel::Update(const DemoInputs& inputs_)
 
 	ImGui::Text("LightParams");
 
-	static GPM::Vec3 lightDir;
+	/* random init value */
+	static GPM::Vec3 lightDir = {0.1f, -0.5f , 0.1f};
 	static GPM::Vec4 lightColor = { 1.0f,1.0f,1.0f,1.0f };
 
 	DemoModelLightBuffer lightBuffer = {};
@@ -524,9 +528,13 @@ void DemoModel::Render(const DemoInputs& inputs_)
 
 void DemoModel::DrawModel(ID3D12GraphicsCommandList4* cmdList, const DX12Helper::Model& model)
 {
-	cmdList->SetDescriptorHeaps(1, &model.descHeap); // set the descriptor heap
-	// set the descriptor table to the descriptor heap (parameter 1, as constant buffer root descriptor is parameter index 0)
-	cmdList->SetGraphicsRootDescriptorTable(1, model.descHeap->GetGPUDescriptorHandleForHeapStart());
+	if (model.textures.size() > 0)
+	{
+		cmdList->SetDescriptorHeaps(1, &model.descHeap); // set the descriptor heap
+		// set the descriptor table to the descriptor heap (parameter 1, as constant buffer root descriptor is parameter index 0)
+
+		cmdList->SetGraphicsRootDescriptorTable(1, model.descHeap->GetGPUDescriptorHandleForHeapStart());
+	}
 
 	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // set the primitive topology
 	cmdList->IASetVertexBuffers(0, model.vBufferViews.size(), model.vBufferViews.data()); // set the vertex buffer (using the vertex buffer view)
