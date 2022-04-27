@@ -408,7 +408,9 @@ bool DX12Helper::CreateDDSTexture(const std::string& filePath_, TextureResource&
 	std::vector<D3D12_SUBRESOURCE_DATA> subresources;
 	bool isCube = false;
 
-	hr = DirectX::LoadDDSTextureFromFile(uploader_.device, (wchar_t*)filePath_.c_str(), resourceData_.buffer, ddsData, subresources, 0ULL, nullptr, &isCube);
+	std::wstring wString = std::wstring(filePath_.begin(), filePath_.end());
+
+	hr = DirectX::LoadDDSTextureFromFile(uploader_.device, wString.c_str(), resourceData_.buffer, ddsData, subresources, 0ULL, nullptr, &isCube);
 
 	if (FAILED(hr))
 	{
