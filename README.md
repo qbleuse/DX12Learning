@@ -40,6 +40,9 @@ ___
     - [__Depth Buffer__](#depth-buffer)
     - [__Index Buffer__](#index-buffer)
     - [__Texture__](#texture)
+    - [___Constant Buffer___](#constant-buffer)
+    - [___Quad Pipeline___](#quad-pipeline)
+    - [___Drawing the Quad___](#drawing-the-quad)
   - [Model](#model)
   - [Skybox](#skybox)
   - [Wrapping Up](#wrapping-up)
@@ -1375,7 +1378,6 @@ ___
 ## Credits
 
 I did not found much help to learn it, I mainly used:
-
 
 - The API's [official documentation](https://docs.microsoft.com/en-us/windows/win32/api/_direct3d12/)
 - This [complete and great tutorial](https://www.braynzarsoft.net/viewtutorial/q16390-04-directx-12-braynzar-soft-tutorials) that helped me all along my journey from BryanzarSoft (However, a bit outdated)
