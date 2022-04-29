@@ -370,11 +370,11 @@ bool DX12Handle::MakeDepthBuffer(unsigned int windowWidth_, unsigned int windowH
 	HRESULT hr;
 
 	D3D12_DEPTH_STENCIL_VIEW_DESC depthStencilDesc = {};
-	depthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
-	depthStencilDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	depthStencilDesc.Format			= DXGI_FORMAT_D32_FLOAT;
+	depthStencilDesc.ViewDimension	= D3D12_DSV_DIMENSION_TEXTURE2D;
 
 	D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
-	depthOptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+	depthOptimizedClearValue.Format				= DXGI_FORMAT_D32_FLOAT;
 	depthOptimizedClearValue.DepthStencil.Depth = 1.0f;
 
 	D3D12_HEAP_PROPERTIES depthHeapDesc = {};

@@ -35,7 +35,11 @@ ___
       - [___Root Signature___](#root-signature)
       - [___Creating the Pipeline___](#creating-the-pipeline)
       - [___Creating the Vertex Buffer___](#creating-the-vertex-buffer)
+      - [___Drawing!___](#drawing)
   - [Textured Quad](#textured-quad)
+    - [__Depth Buffer__](#depth-buffer)
+    - [__Index Buffer__](#index-buffer)
+    - [__Texture__](#texture)
   - [Model](#model)
   - [Skybox](#skybox)
   - [Wrapping Up](#wrapping-up)
@@ -300,10 +304,10 @@ Here is the creation of the descriptor heap:
  /* Create a render target view for each back buffer */
  for (int i = 0; i < bufferCount; i++)
  {
-  _backbufferCPUHandles[i] = backBufferCPUHandle;
-  _backbufferGPUHandles[i] = backBufferGPUHandle;
-  backBufferCPUHandle.ptr += _backbufferDescOffset;
-  backBufferGPUHandle.ptr += _backbufferDescOffset;
+    _backbufferCPUHandles[i] = backBufferCPUHandle;
+    _backbufferGPUHandles[i] = backBufferGPUHandle;
+    backBufferCPUHandle.ptr += _backbufferDescOffset;
+    backBufferGPUHandle.ptr += _backbufferDescOffset;
  }
  
 ```
@@ -322,14 +326,14 @@ Them getting the resources and binding descriptor is as follow:
  /* Create a render target view for each back buffer */
  for (int i = 0; i < bufferCount; i++)
  {
-  /* first we get the n'th buffer in the swap chain and store it in the n'th
-   * position of our ID3D12Resource array */
-  hr = _swapchain->GetBuffer(i, IID_PPV_ARGS(&_backbuffers[i]));
+    /* first we get the n'th buffer in the swap chain and store it in the n'th
+     * position of our ID3D12Resource array */
+    hr = _swapchain->GetBuffer(i, IID_PPV_ARGS(&_backbuffers[i]));
 
-  /* the we "create" a render target view which binds the swap chain buffer(ID3D12Resource[n]) to the rtv handle */
-  _device->CreateRenderTargetView(_backbuffers[i], nullptr, backBufferCPUHandle);
+    /* the we "create" a render target view which binds the swap chain buffer(ID3D12Resource[n]) to the rtv handle */
+    _device->CreateRenderTargetView(_backbuffers[i], nullptr, backBufferCPUHandle);
 
-  backBufferCPUHandle.ptr += _backbufferDescOffset;
+    backBufferCPUHandle.ptr += _backbufferDescOffset;
  }
 ```
 
@@ -350,12 +354,12 @@ We've already reviewed the new command system earlier so we need two things to s
 
  for (int i = 0; i < bufferCount; i++)
  {
-  hr = _device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&_cmdAllocators[i]));
-  if (FAILED(hr))
-  {
-   printf("Failing creating DX12 command allocator nb %d: %s\n", i, std::system_category().message(hr).c_str());
-   return false;
-  }
+    hr = _device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&_cmdAllocators[i]));
+    if (FAILED(hr))
+    {
+     printf("Failing creating DX12 command allocator nb %d: %s\n", i, std::system_category().message(hr).c_str());
+     return false;
+    }
  }
 
  /*===== Create the Command Lists =====*/
@@ -363,14 +367,14 @@ We've already reviewed the new command system earlier so we need two things to s
 
  for (int i = 0; i < bufferCount; i++)
  {
-  hr = _device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, _cmdAllocators[i], NULL, IID_PPV_ARGS(&_cmdLists[i]));
-  if (FAILED(hr))
-  {
-   printf("Failing creating DX12 command List nb %d: %s\n", i, std::system_category().message(hr).c_str());
-   return false;
-  }
+    hr = _device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, _cmdAllocators[i], NULL, IID_PPV_ARGS(&_cmdLists[i]));
+    if (FAILED(hr))
+    {
+     printf("Failing creating DX12 command List nb %d: %s\n", i, std::system_category().message(hr).c_str());
+     return false;
+    }
 
-  _cmdLists[i]->Close();
+    _cmdLists[i]->Close();
  }
  
 ```
@@ -463,17 +467,17 @@ struct VOut
  
  VOut vert(float3 position : POSITION, float3 color : COLOR)
  {
-  VOut output;
- 
-  output.position = float4(position,1.0);
-  output.color    = color;
- 
-  return output;
+    VOut output;
+    
+    output.position = float4(position,1.0);
+    output.color    = color;
+    
+    return output;
  }
 
  float4 frag(float4 position : SV_POSITION, float3 color : COLOR) : SV_TARGET
  {
-  return float4(color,1.0f);
+    return float4(color,1.0f);
  }
 
 ```
@@ -486,9 +490,9 @@ ID3DBlob* VSErr, VS_ = nullptr;
 
  if (FAILED(D3DCompile(shaderSource_.c_str(), shaderSource_.length(), nullptr, nullptr, nullptr, "main", "vs_5_0", SHADER_FLAG, 0, VS_, &VSErr)))
  {
-  printf("Failed To Compile Shader %s\n", (const char*)(VSErr->GetBufferPointer()));
-  VSErr->Release();
-  return false;
+    printf("Failed To Compile Shader %s\n", (const char*)(VSErr->GetBufferPointer()));
+    VSErr->Release();
+    return false;
  }
 
  shader_.pShaderBytecode = (*VS_)->GetBufferPointer();
@@ -692,19 +696,19 @@ Then we need to issue the command:
 
  // Create synchronization objects and wait until assets have been uploaded to the GPU.
  {
-    ID3D12Fence* uploadFence;
-    hr = uploader_.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&uploadFence));
+        ID3D12Fence* uploadFence;
+        hr = uploader_.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&uploadFence));
 
-    // Wait for the command list to execute; 
-    // for now, we just want to wait for setup to 
-    // complete before continuing.
+        // Wait for the command list to execute; 
+        // for now, we just want to wait for setup to 
+        // complete before continuing.
 
-    // Signal and increment the fence value.
-    uploader_.queue->Signal(uploadFence, 1);
+        // Signal and increment the fence value.
+        uploader_.queue->Signal(uploadFence, 1);
 
-    uploadFence->SetEventOnCompletion(1, *uploader_.fenceEvent);
-    WaitForSingleObject(*uploader_.fenceEvent, INFINITE);
-    uploadFence->Release();
+        uploadFence->SetEventOnCompletion(1, *uploader_.fenceEvent);
+        WaitForSingleObject(*uploader_.fenceEvent, INFINITE);
+        uploadFence->Release();
  }
 ```
 
@@ -740,10 +744,324 @@ So the logic is in the _vBufferView struct of type [D3D12_VERTEX_BUFFER_VIEW](ht
 
 That's about it for the vertex buffer.
 
+#### ___Drawing!___
+
+So, we have everything that we need to draw so we'll go over one iteration of the render loop with the thing we need to set and how we draw.
+
+So firsly get our n-th back buffer
+
+``` cpp
+/* swap between back buffer index so we draw on the correct buffer */
+ _currFrameIndex = _swapchain->GetCurrentBackBufferIndex();
+
+ /* if the current fence value is still less than "fenceValue", then we know the GPU has not finished executing
+  * the command queue since it has not reached the "commandQueue->Signal(fence, fenceValue)" command */
+ if (_fences[_currFrameIndex]->GetCompletedValue() < _fenceValue[_currFrameIndex])
+ {
+  /* set an event that triggers when fence Values are the same */
+  hr = _fences[_currFrameIndex]->SetEventOnCompletion(_fenceValue[_currFrameIndex], _fenceEvent);
+  if (FAILED(hr))
+  {
+   printf("Failing creating DX12 Fence Event Complete for frame nb %u: %s\n", _currFrameIndex, std::system_category().message(hr).c_str());
+   return false;
+  }
+  /* waiting for the command queue to finish executing (executing the event created above) */
+  WaitForSingleObject(_fenceEvent, INFINITE);
+ }
+
+ /* increment fenceValue for next frame */
+ _fenceValue[_currFrameIndex]++;
+
+```
+
+Be aware that `GetCurrentBackBufferIndex()` is a method that came after (in later iteration of IDXGISwapChain and we're using the fourth one).
+
+That's easy to replicate anyway with something like
+
+``` cpp
+ index = index++ % backbufferNb;
+```
+
+But be aware of it.
+
+Also we want to wait if no backbuffers are available to draw, so we check fences here.
+
+We then know wich back buffer we'll be writing on so we're setting our backbuffer as render target.
+
+``` cpp
+ hr = _cmdAllocators[_currFrameIndex]->Reset();
+ hr = _cmdLists[_currFrameIndex]->Reset(_cmdAllocators[_currFrameIndex], NULL);
+
+ _barrier.Type                      = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+ _barrier.Flags                     = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+ _barrier.Transition.Subresource    = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+ _barrier.Transition.pResource      = _backbuffers[_currFrameIndex];
+ _barrier.Transition.StateBefore    = D3D12_RESOURCE_STATE_PRESENT;
+ _barrier.Transition.StateAfter     = D3D12_RESOURCE_STATE_RENDER_TARGET;
+ _cmdLists[_currFrameIndex]->ResourceBarrier(1, &_barrier);
+
+ _cmdLists[_currFrameIndex]->OMSetRenderTargets(1, &_backbufferCPUHandles[_currFrameIndex], FALSE, &_depthBufferCPUHandle);
+```
+
+The way the swapchain knows what backbuffer giving to the screen is that when screen asks for one, it pulls all the buffer that are in PRESENT state and they take the most recent one.
+
+When we want to write on it we need to swap the state, otherwise it might take an unfinished buffer and write it on screen.
+
+We also need to reset our command list to begin saving our commands.
+
+You might have saw that we set our depth buffer here, it is not useful but you remember that we set it here.
+
+Then we can set our triangle Pipeline and infos.
+
+``` cpp
+ // Clear the render target by using the ClearRenderTargetView command
+ const float clearColor[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+ inputs_.renderContext.currCmdList->ClearRenderTargetView(inputs_.renderContext.currBackBufferHandle, clearColor, 0, nullptr);
+
+ // draw triangle
+ inputs_.renderContext.currCmdList->SetGraphicsRootSignature(_rootSignature); // set the root signature
+ inputs_.renderContext.currCmdList->SetPipelineState(_pso);
+
+```
+
+we'll do a clear, just to be clean.
+
+The only thing we've not touch upon in the pieline is the Viewport and Scissor, you need to create them beforehand but they can be setted at anytime so it is pretty permisive.
+
+``` cpp
+ D3D12_VIEWPORT viewport     = {};
+ D3D12_RECT     scissorRect  = {};
+
+ viewport.Width     = inputs_.renderContext.width;
+ viewport.Height    = inputs_.renderContext.height;
+ viewport.MaxDepth  = 1.0f;
+ scissorRect.right  = inputs_.renderContext.width;
+ scissorRect.bottom = inputs_.renderContext.height;
+
+ inputs_.renderContext.currCmdList->RSSetViewports(1, &viewport); // set the viewports
+ inputs_.renderContext.currCmdList->RSSetScissorRects(1, &scissorRect); // set the scissor rects
+
+```
+
+We set basic values, we need it to be the size of the window and depth of 1.0f.
+
+Then, set vertex buffer and draw.
+
+``` cpp
+inputs_.renderContext.currCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // set the primitive topology
+ inputs_.renderContext.currCmdList->IASetVertexBuffers(0, 1, &_vBufferView); // set the vertex buffer (using the vertex buffer view)
+
+ inputs_.renderContext.currCmdList->DrawInstanced(3, 1, 0, 0); // finally draw 3 vertices (draw the triangle)
+```
+
+Not completely sure if you need to set the primitive topology for each draw call but it's done there.
+
+All of our draws have been done, we can close our command list and change the backbuffer to present.
+
+``` cpp
+ _barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+ _barrier.Flags                  = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+ _barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+ _barrier.Transition.pResource   = _backbuffers[_currFrameIndex];
+ _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+ _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+ _cmdLists[_currFrameIndex]->ResourceBarrier(1, &_barrier);
+
+ hr = _cmdLists[_currFrameIndex]->Close();
+```
+
+We then can issue the draws.
+
+``` cpp
+  ID3D12CommandList* cmdLists[1] = { dx12handle._context.currCmdList};
+
+  dx12handle._queue->ExecuteCommandLists(1,cmdLists);
+```
+
+It goes and execute all our commands at once immediately.
+
+Then we an update our fences.
+
+``` cpp
+hr = _queue->Signal(_fences[_currFrameIndex], _fenceValue[_currFrameIndex]);
+ _swapchain->Present(0, 0);
+```
+
+Here, we call Present to tell our new buffer is on his way. It tipically resets and sort the latest buffer here.
+
+To be fair, our buffer is on the way here so the last buffer for him is the (n-1)-th backbuffer, so we could say swapchain always have a frame late compare to what we give. Screen buffer fetch is asynchronous anyway so it was always the case, nothing surprising.
+
+And you have a Triangle!
+
+![triangle_image](media/Screenshots/triangle.png)
+
+The only thing we have not talked abou is cleaning up.
+
+You just need to call `Release()` on every pointer object and DirectX12 will clean up on his own time. However to do that you need to be sure no work is being done anymore on the GPU, otherwise it will crash.
+
+So, we yield the GPU.
+
+``` cpp
+for (int i = 0; i < bufferCount; i++)
+{   
+    uint64_t fenceValueForSignal = ++_fenceValue[i];
+    _queue->Signal(_fences[i], fenceValueForSignal);
+    if (_fences[i]->GetCompletedValue() < _fenceValue[i])
+    {
+     _fences[i]->SetEventOnCompletion(fenceValueForSignal, _fenceEvent);
+     WaitForSingleObject(_fenceEvent, INFINITE);
+    }
+}   
+```
+
+And we're done! A beautiful triangle! You've seen all the basics of how to draw things on DirectX12. Yeay!
+
+In the next chapter, we'll see how to do a 3D Textured Quad.
 
 ___
 
 ## Textured Quad
+
+### __Depth Buffer__
+
+Firstly, to do 3D model, we would need to make a depth buffer.
+So, let's make one.
+
+``` cpp
+ /* create a depth stencil descriptor heap so we can get a pointer to the depth stencil buffer */
+ D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
+ dsvHeapDesc.NumDescriptors = 1;
+ dsvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+ hr = _device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&_depthBufferDescHeap));
+
+ _depthBufferCPUHandle = _depthBufferDescHeap->GetCPUDescriptorHandleForHeapStart();
+```
+
+We were already doing it before but I'll remind you that we need a descriptor heap to create our descriptor for our buffer.
+Let's create our buffer.
+
+``` cpp
+ D3D12_DEPTH_STENCIL_VIEW_DESC depthStencilDesc = {};
+ depthStencilDesc.Format        = DXGI_FORMAT_D32_FLOAT;
+ depthStencilDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+
+ D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
+ depthOptimizedClearValue.Format             = DXGI_FORMAT_D32_FLOAT;
+ depthOptimizedClearValue.DepthStencil.Depth = 1.0f;
+
+ D3D12_HEAP_PROPERTIES depthHeapDesc = {};
+ depthHeapDesc.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+ D3D12_RESOURCE_DESC depthResourceDesc = {};
+ depthResourceDesc.Dimension        = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+ depthResourceDesc.Format           = DXGI_FORMAT_D32_FLOAT;
+ depthResourceDesc.Width            = windowWidth_;
+ depthResourceDesc.Height           = windowHeight_;
+ depthResourceDesc.DepthOrArraySize = 1;
+ depthResourceDesc.SampleDesc.Count = 1;
+ depthResourceDesc.Flags            = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+
+ hr = _device->CreateCommittedResource(
+  &depthHeapDesc,
+  D3D12_HEAP_FLAG_NONE,
+  &depthResourceDesc,
+  D3D12_RESOURCE_STATE_DEPTH_WRITE,
+  &depthOptimizedClearValue,
+  IID_PPV_ARGS(&_depthBuffer)
+ );
+
+ _device->CreateDepthStencilView(_depthBuffer, &depthStencilDesc, _depthBufferCPUHandle);
+```
+
+We create our resources and our descriptor.
+
+### __Index Buffer__
+
+We'll put an index Buffer on our model. For the resource it is the same way than creating vertex buffer, but you put it in a different struct:
+
+[D3D12_INDEX_BUFFER_VIEW](https://docs.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_index_buffer_view)
+
+``` cpp
+ /* create index buffer view out of resources */
+ _iBufferView.BufferLocation = _iBuffer->GetGPUVirtualAddress();
+ _iBufferView.Format         = DXGI_FORMAT_R32_UINT; // 32-bit unsigned integer (this is what a dword is, double word, a word is 2 bytes)
+ _iBufferView.SizeInBytes    = iBufferSize;
+```
+
+### __Texture__
+
+Creating our texture is the same as before, resource and descriptor so we create our descriptor heap...
+
+``` cpp
+/* create the descriptor heap that will store our srv */
+ D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+ heapDesc.NumDescriptors = 1;
+ heapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+ heapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+ hr = dx12Handle_._device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&_mainDescriptorHeap));
+```
+
+``` cpp
+ /* create upload heap to send texture info to default */
+ D3D12_HEAP_PROPERTIES heapProp = {};
+ heapProp.Type                  = D3D12_HEAP_TYPE_UPLOAD;
+
+ D3D12_RESOURCE_DESC uploadDesc = {};
+
+ uploadDesc.Dimension           = D3D12_RESOURCE_DIMENSION_BUFFER;
+ uploadDesc.SampleDesc.Count    = 1;
+ uploader_.device->GetCopyableFootprints(&texDesc_, 0, 1, 0, nullptr, nullptr, nullptr, &uploadDesc.Width);
+ uploadDesc.Height              = 1;
+ uploadDesc.DepthOrArraySize    = 1;
+ uploadDesc.MipLevels           = 1;
+ uploadDesc.Layout              = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+ uploader_.uploadBuffers.resize(uploader_.uploadBuffers.size() + 1);
+ hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploader_.uploadBuffers.back()));
+
+ /* create default heap, technically the last place where the texture will be sent */
+ heapProp.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+ D3D12_RESOURCE_DESC texDesc_ = {};
+ texDesc_.Dimension          = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+ texDesc_.Alignment          = 0;  // may be 0, 4KB, 64KB, or 4MB. 0 will let runtime decide between 64KB and 4MB (4MB for multi-sampled textures)
+ texDesc_.Width              = width; // width of the texture
+ texDesc_.Height             = height; // height of the texture
+ texDesc_.DepthOrArraySize   = 1;  // if 3d image, depth of 3d image. Otherwise an array of 1D or 2D textures (we only have one image, so we set 1)
+ texDesc_.MipLevels          = 1;  // Number of mipmaps. We are not generating mipmaps for this texture, so we have only one level
+ texDesc_.Format             = dxgiFormat; // This is the dxgi format of the image (format of the pixels)
+ texDesc_.SampleDesc.Count   = 1;  // This is the number of samples per pixel, we just want 1 sample
+ texDesc_.SampleDesc.Quality = 0;  // The quality level of the samples. Higher is better quality, but worse performance
+ texDesc_.Layout             = D3D12_TEXTURE_LAYOUT_UNKNOWN; // The arrangement of the pixels. Setting to unknown lets the driver choose the most efficient one
+ texDesc_.Flags              = D3D12_RESOURCE_FLAG_NONE; // no flags
+
+ hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &texDesc_, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(resourceData_.buffer));
+
+ /* uploading and barrier for making the application wait for the ressource to be uploaded on gpu */
+ UpdateSubresources(uploader_.copyList, *resourceData_.buffer, uploader_.uploadBuffers.back(), 0, 0, 1, &resourceData_.texData);
+
+ D3D12_RESOURCE_BARRIER barrier = {};
+ barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+ barrier.Transition.pResource   = *resourceData_.buffer;
+ barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+ barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+ barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+ uploader_.copyList->ResourceBarrier(1, &barrier);
+```
+
+What's interesting here is that the Upload part is simply a buffer (and I don't think it can be otherwise), while the description for the GPU-only texture is detailed on how the texture should be padded.
+
+Also to find the padding and the size of the buffer for the upload resource we use `GetCopyableFootprints` which directly translates to:
+
+``` cpp
+int textureHeapSize = ((((width * numBytesPerPixel) + 255) & ~255) * (height - 1)) + (width * numBytesPerPixel)
+
+```
+
+To be 256 byte aligned.
+
 
 ___
 
@@ -762,6 +1080,5 @@ ___
 ## Credits
 
 ``` cpp
-
 
 ```
