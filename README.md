@@ -976,7 +976,7 @@ Let's create our buffer.
 
 We create our resources and our descriptor.
 
-### __Index Buffer__
+### ___Index Buffer___
 
 We'll put an index Buffer on our model. For the resource it is the same way than creating vertex buffer, but you put it in a different struct:
 
@@ -989,7 +989,7 @@ We'll put an index Buffer on our model. For the resource it is the same way than
  _iBufferView.SizeInBytes    = iBufferSize;
 ```
 
-### __Texture__
+### ___Texture___
 
 Creating our texture is the same as before, resource and descriptor so we create our descriptor heap...
 
@@ -1062,23 +1062,322 @@ int textureHeapSize = ((((width * numBytesPerPixel) + 255) & ~255) * (height - 1
 
 To be 256 byte aligned.
 
+Then you can define their descriptor with:
 
+``` cpp
+/* make the shader resource view from buffer and texDesc to make it available to use */
+D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+srvDesc.Shader4ComponentMapping     = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+srvDesc.Format							   = texDesc.Format;
+srvDesc.ViewDimension					= D3D12_SRV_DIMENSION_TEXTURE2D;
+srvDesc.Texture2D.MipLevels			= 1;
+
+uploader_.device->CreateShaderResourceView(*resourceData_.buffer, &srvDesc, resourceData_.srvHandle);
+```
+
+srvHandle is a descriptor handle.
+
+### ___Constant Buffer___
+
+Now, we want to be able to send our matrices through the CPU to the GPU to use in our shader.
+Wich, by the way, here's the one I will use:
+
+``` cpp
+	struct VOut
+	{
+		float4 position : SV_POSITION;
+		float2 uv : UV;
+	};
+
+	cbuffer ConstantBuffer : register(b0)
+	{
+		float4x4 perspective;
+		float4x4 view;
+		float4x4 model;
+	};	
+
+	VOut vert(float3 position : POSITION, float2 uv : UV)
+	{
+		VOut output;
+	
+		float4 outPos	= mul(float4(position,1.0),model);
+		outPos			= mul(outPos,view);
+		output.position = mul(outPos,perspective);
+		output.uv		= uv;
+	
+		return output;
+	}
+
+	Texture2D tex : register(t0);
+	SamplerState wrap : register(s0);
+
+	float4 frag(float4 position : SV_POSITION, float2 uv : UV) : SV_TARGET
+	{
+		return tex.Sample(wrap,uv);
+	}
+```
+
+So, As we now know, all resources are the same in DirectX12, so we'll create them as usual.
+But, different from other buffer, we want to update from CPU to GPU every frame.
+It implies two things:
+- the type of resource we'll use is a update heap resource in order to update it every frame
+- we cannot only create one because if multiple command list write thing into the buffer we cannot garantee that buffer will not be rewritten while being used (it would maybe need barrier to do that, it would be highly ineffectve anyway). We'll create one constant buffer for each backbuffer number.
+
+A cool feature of DirectX12 is to leave the upload buffer mapped on GPU when you use it: tipically constant buffer like this one are updated each frame, to ask the buffer to map its value to the cpu buffer, write in it, then unmap it each time would be stupid.
+Making possible for the resource to constantly be mapped in order to simply ask the buffer to fetch everytime is way better.
+
+Anyway, this is how we do it:
+
+``` cpp
+for (int i = 0; i < frameBufferNb; i++)
+{
+   D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+   heapDesc.NumDescriptors = cbvNb;
+   heapDesc.Type			   = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+   // This flag indicates that this descriptor heap can be bound to the pipeline and that descriptors contained in it can be referenced by a root table.
+   heapDesc.Flags			   = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+   hr = uploader_.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(uploader_.descHeap));
+
+   D3D12_HEAP_PROPERTIES heapProp = {};
+	heapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	D3D12_RESOURCE_DESC resDesc = {};
+
+	resDesc.Dimension			   = D3D12_RESOURCE_DIMENSION_BUFFER;
+	resDesc.SampleDesc.Count	= 1;
+	resDesc.Width				   = (bufferSize + (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1)) & ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1);
+	resDesc.Height				   = 1;
+	resDesc.DepthOrArraySize	= 1;
+	resDesc.MipLevels			   = 1;
+	resDesc.Layout				   = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	hr = uploader_.device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&resourceData_.buffer));
+
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+	cbvDesc.SizeInBytes  = resDesc.Width;
+
+	UINT offset = uploader_.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	resourceData_.bufferCPUHandle       = (*uploader_.descHeap)->GetCPUDescriptorHandleForHeapStart();
+	resourceData_.bufferCPUHandle.ptr   += offset * uploader_.cbNb;
+
+	// Describe and create the shadow constant buffer view (CBV) and 
+	// cache the GPU descriptor handle.
+	cbvDesc.BufferLocation = resourceData_.buffer->GetGPUVirtualAddress();
+	uploader_.device->CreateConstantBufferView(&cbvDesc, resourceData_.bufferCPUHandle);
+
+	CD3DX12_RANGE readRange(0, 0);// We do not intend to read from this resource on the CPU.
+	hr = resourceData_.buffer->Map(0, &readRange, &resourceData_.cpuHandle);
+}
+```
+
+We create a descriptor heap for our descriptors (one for each because we want to bind different resources for each frame and we wouldn't be able to do with only one), then the resource, then we bind it to the descriptor, and bind it to a cpuHandle which for me is a void* (I wanted to use it for all type of constant buffer).
+
+Also, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT = 256.
+
+### ___Quad Pipeline___
+
+Now that we have new resources we need to change our root signatures to explain that we want to take them as parameters of the pipeline.
+
+We, then, need to make some root parameters.
+
+``` cpp
+/* texture descriptor */
+	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[1] = {};
+	descriptorTableRanges[0].RangeType							      = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorTableRanges[0].NumDescriptors						   = 1;
+	descriptorTableRanges[0].OffsetInDescriptorsFromTableStart	= D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	/* create a descriptor table */
+	D3D12_ROOT_DESCRIPTOR_TABLE descriptorTable;
+	descriptorTable.NumDescriptorRanges = _countof(descriptorTableRanges);
+	descriptorTable.pDescriptorRanges	= &descriptorTableRanges[0];
+
+	/* create a root descriptor, which explains where to find the data for this root parameter */
+	D3D12_ROOT_DESCRIPTOR rootCBVDescriptor = {};
+
+	/* create a root parameter and fill it out, cbv in 0, srv in 1 */
+	D3D12_ROOT_PARAMETER  rootParameters[2];
+	rootParameters[0].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[0].Descriptor        = rootCBVDescriptor;
+	rootParameters[0].ShaderVisibility	= D3D12_SHADER_VISIBILITY_VERTEX;
+	rootParameters[1].ParameterType		= D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParameters[1].DescriptorTable	= descriptorTable;
+	rootParameters[1].ShaderVisibility	= D3D12_SHADER_VISIBILITY_PIXEL;
+
+	/* create a static sampler */
+	D3D12_STATIC_SAMPLER_DESC sampler = {};
+	sampler.AddressU			   = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressV			   = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressW			   = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.ComparisonFunc     = D3D12_COMPARISON_FUNC_NEVER;
+	sampler.MaxLOD				   = D3D12_FLOAT32_MAX;
+	sampler.ShaderVisibility	= D3D12_SHADER_VISIBILITY_PIXEL;
+
+	/* then making the root */
+	D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
+	rootDesc.NumParameters		= _countof(rootParameters);
+	rootDesc.pParameters       = rootParameters;
+	rootDesc.NumStaticSamplers	= 1;
+	rootDesc.pStaticSamplers	= &sampler;
+	rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | // we can deny shader stages here for better performance
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
+
+	hr = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &tmp, &error);
+
+	hr = dx12Handle_._device->CreateRootSignature(0, tmp->GetBufferPointer(), tmp->GetBufferSize(), IID_PPV_ARGS(&_rootSignature));
+```
+
+There is multiple method to describe your root parameters, above are shown the descriptor tables (usually for multiple resources at once, such as binding textures taht are in the same descriptor heaps), and the descriptor (same as the table but it only takes one).
+
+I also made a sampler but nothing fancy (I did not specify so it is a point sampler).
+
+Also some changes in the pipeline to have depth write, depth clip and depth comparison enabled:
+
+``` cpp
+   D3D12_RASTERIZER_DESC rasterDesc = {};
+	rasterDesc.FillMode			= D3D12_FILL_MODE_SOLID;
+	rasterDesc.CullMode			= D3D12_CULL_MODE_NONE;
+	rasterDesc.DepthClipEnable	= TRUE;
+
+   D3D12_DEPTH_STENCIL_DESC depthStencilDesc = {};
+	depthStencilDesc.DepthEnable	= TRUE; // enable depth testing
+	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL; // can write depth data to all of the depth/stencil buffer
+	depthStencilDesc.DepthFunc		= D3D12_COMPARISON_FUNC_LESS; // pixel fragment passes depth test if destination pixel's depth is less than pixel fragment's
+```
+
+That's about it. Let's draw!
+
+### ___Drawing the Quad___
+
+First, don't forget to put your depth buffer:
+
+``` cpp
+	_cmdLists[_currFrameIndex]->OMSetRenderTargets(1, &_backbufferCPUHandles[_currFrameIndex], FALSE, &_depthBufferCPUHandle);
+```
+
+Update the Constant buffer...
+
+``` cpp
+/* update CBuffer */
+	DemoQuadConstantBuffer cBuffer = {};
+	cBuffer.perspective	= GPM::Transform::perspective(60.0f * TO_RADIANS, viewport.Width / viewport.Height, 0.001f, 1000.0f);
+	cBuffer.view		= mainCamera.GetViewMatrix();
+   cBuffer.model = GPM::Transform::rotationY(rot) * GPM::Transform::scaling(scale);
+
+   memcpy(_constantBuffers[inputs_.renderContext.currFrameIndex].cpuHandle, (void*)&cBuffer, sizeof(cBuffer));
+```
+
+...Set all of our resources...
+
+``` cpp
+   cmdList->SetGraphicsRootSignature(_rootSignature); // set the root signature
+	cmdList->SetPipelineState(_pso);
+	cmdList->RSSetViewports(1, &viewport); // set the viewports
+	cmdList->RSSetScissorRects(1, &scissorRect); // set the scissor rects
+	cmdList->SetGraphicsRootConstantBufferView(0, _constantBuffers[inputs_.renderContext.currFrameIndex].buffer->GetGPUVirtualAddress());
+	cmdList->SetDescriptorHeaps(1, &_mainDescriptorHeap); // set the descriptor heap
+	// set the descriptor table to the descriptor heap (parameter 1, as constant buffer root descriptor is parameter index 0)
+	cmdList->SetGraphicsRootDescriptorTable(1, _mainDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+```
+
+...Then draw!
+
+``` cpp
+	cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // set the primitive topology
+	cmdList->IASetVertexBuffers(0, 1, &_vBufferView); // set the vertex buffer (using the vertex buffer view)
+	cmdList->IASetIndexBuffer(&_iBufferView); // set the index buffer (using the index buffer view)
+
+	cmdList->DrawIndexedInstanced(6, 1, 0, 0, 0); // finally draw 6 indices (draw the quad)
+```
+
+And we're done! here's the result:
+
+![quad_image](media/Screenshots/Quad.png)
+
+A rotated quad.
 ___
 
 ## Model
+
+As you know, most tutorial ends at this point because if you can do a textured cube, you usually can do everything else (which quite honestly I'm agree with).
+
+But I wanted to take a bit more time to explain how it would be done for certain common situation that you should face.
+
+For example for the model, you will face having multiple vertex buffer then you would need to create multiple resources, then create multiple vertex buffer view and bind them as such:
+
+``` cpp
+	cmdList->IASetVertexBuffers(0, model.vBufferViews.size(), model.vBufferViews.data()); // set the vertex buffer (using the vertex buffer view)
+```
+
+We only had a single buffer to this point so we were offsetting ni the input layout but now it would look something like this:
+
+``` cpp
+	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
+	{
+		{ "POSITION",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "UV",			0, DXGI_FORMAT_R32G32_FLOAT,	1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL",		0, DXGI_FORMAT_R32G32B32_FLOAT,	2, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	};
+```
+
+No offsets, just taking in the right buffer.
+
+And with multiple textures your table would be like this:
+
+``` cpp
+	/* texture descriptor */
+	D3D12_DESCRIPTOR_RANGE  descriptorTableRanges[1]			= {};
+	descriptorTableRanges[0].RangeType							   = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorTableRanges[0].NumDescriptors						= 3;
+	descriptorTableRanges[0].OffsetInDescriptorsFromTableStart	= D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+```
+
+Here we have three, then your descriptor heap would have three Shader Resource View in it.
+And then you would set them as usual.
 
 ___
 
 ## Skybox
 
+As for Cubemap textures, Windows made very good open source library for managing texture (DirectXTex), including DDSTextureLoader12 don't hesitate to use them.
+That's a regular texture so all the process is the same.
+
+And for instance, a skybox would need to have a whole other pipeline with other shader and settings compared to a model so keep that in mind, and don't hesitate do do multiple pipelines.
+
+For example, for a skybox here's what change compared to a regular pipeline:
+
+``` cpp
+	D3D12_DEPTH_STENCIL_DESC depthStencilDesc = {};
+	depthStencilDesc.DepthEnable	   = TRUE; // enable depth testing
+	depthStencilDesc.DepthWriteMask  = D3D12_DEPTH_WRITE_MASK_ZERO; // can write depth data to all of the depth/stencil buffer
+	depthStencilDesc.DepthFunc		   = D3D12_COMPARISON_FUNC_LESS_EQUAL; // pixel fragment passes depth test if destination pixel's depth is less than pixel fragment's
+```
+
+No writes and less equal. creating a whole pipeline for different shader and two settings seems like a lot but I promise, it is worth it.
+
 ___
 
 ## Wrapping Up
+
+In DirectX12 (but in most modern graphic API, it is the same), initialising is tedious but in counterpart the performance that you get back from it are staggeringly good, so it is worth the effort.
+
+Also, once you get the hang of it, it makes much more sense because you understand what does your CPU and GPU at any point in time and what it does is not hidden by the API but presented to you.
+
+For once, it almost seems as if you had full control over the GPU which i like a lot. Though it makes it much harder to do anything, I acknowledge it.
+
+Anyway, Thank you very much to any one who read this until the end. I very much hoped it helped you in shape or form.
 
 ___
 
 ## Credits
 
-``` cpp
+I did not found much help to learn it, I mainly used:
 
-```
+
+- The API's [official documentation](https://docs.microsoft.com/en-us/windows/win32/api/_direct3d12/)
+- This [complete and great tutorial](https://www.braynzarsoft.net/viewtutorial/q16390-04-directx-12-braynzar-soft-tutorials) that helped me all along my journey from BryanzarSoft (However, a bit outdated)
+
+Again, Thank you for reading and wish you to render well!
