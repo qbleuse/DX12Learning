@@ -398,7 +398,7 @@ But you could be even more effective by creating more command lists to do multit
 
 ### __Fences__
 
-So, that's a funny one two.
+So, that's a funny one too.
 
 In DirectX12, synchronisation between precessor is left to the user through the means of fences and event.
 What that mean is the synchronisation between CPU and GPU is not automatic like it was before but you need to make fences to be sure that you're not writing over something that is being used are drawn on.
